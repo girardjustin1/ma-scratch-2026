@@ -6,7 +6,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { ProgressBar } from '@/components/base/progress-indicators/progress-indicators';
 import { Toggle } from '@/components/base/toggle/toggle';
-import { bubbles, brand, chrome, noData, ramps, status } from '../theme/tokens';
+import { bubbles, chrome, noData, ramps, status } from '../theme/tokens';
 import { useMode } from '../theme/mode';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { Card, SampleTag } from '../components/Basics';
@@ -188,11 +188,18 @@ export const MapColors: StoryObj = {
             <Swatch key={x} fill={x} label={i === 0 ? 'Class 1 · fewest' : i === 4 ? 'Class 5 · most' : `Class ${i + 1}`} />
           ))}
         </Row>
-        <Row title="No data, bubbles and pin">
+        <Row
+          title="Retailer bubbles · listed claims per store"
+          note="Single purple hue, fewest lightest. Stores are colored by their own count; groups (zoomed out) by their average per store."
+        >
+          {bubbles[mode].ramp.map((x, i) => (
+            <Swatch key={x} fill={x} label={i === 0 ? 'Class 1 · fewest' : i === 4 ? 'Class 5 · most' : `Class ${i + 1}`} />
+          ))}
+        </Row>
+        <Row title="No data, hollow stores and pin">
           <Swatch fill={nd.fill} label={`${LABELS.noData} (hatched)`} pattern={`repeating-linear-gradient(135deg, ${nd.line} 0 1.5px, ${nd.fill} 1.5px 5px)`} />
-          <Swatch fill={bubbles[mode].fill} label="Retailer bubble" />
           <Swatch fill={bubbles[mode].hollow} label="No listed claims (hollow)" />
-          <Swatch fill={brand.primary[mode]} label="Pin" />
+          <Swatch fill={chrome[mode].ink} label="Pin (ink, stands out from bubbles)" />
         </Row>
         <Row title="Low match rate outline" note="Dashed tract outline where under 80% of claims matched a store. Legend pairs it with a warning icon and words.">
           <div className="flex w-[220px] flex-col gap-1">

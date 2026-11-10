@@ -12,7 +12,7 @@ const Frame = ({ children }: { children: React.ReactNode }) => <div className="h
 
 export const MapPage: StoryObj<{ metric: MetricKey; online: boolean }> = {
   name: "Map",
-  args: { metric: 'claims', online: false },
+  args: { metric: 'income', online: false },
   argTypes: { metric: { control: 'inline-radio', options: ['claims', 'income', 'perRetailer'] } },
   render: ({ metric, online }) => (
     <Frame><ExplorePage key={metric + online} data={sampleExploreData} initialFilters={S.defaultFilters} initialMetric={metric} online={online} initialBasemap={online ? 'mapbox' : 'outline'} /></Frame>

@@ -56,11 +56,20 @@ export const noData = {
   dark: { fill: '#1f1f1d', line: '#4a4945' },
 } as const;
 
-/** Retailer bubbles: listed claims vs. no listed claims (hollow). */
+/**
+ * Retailer bubbles. `ramp` colors listed claims per store in five classes (low → high),
+ * validated in ordinal mode against the map background (light #eef0ee, dark #141413):
+ * one hue, monotone lightness, visible steps, light end clears 2:1. Groups of stores
+ * (clusters, zoomed out) use the same ramp on their average per store, so a color always
+ * means the same thing. `hollow` = a licensed store with no listed claims.
+ */
 export const bubbles = {
-  light: { fill: '#6250d6', stroke: '#ffffff', hollow: '#52514e' },
-  dark: { fill: '#9085e9', stroke: '#1a1a19', hollow: '#c3c2b7' },
+  light: { ramp: ['#a08fec', '#8169e2', '#6750d4', '#4c36ad', '#30207a'], stroke: '#ffffff', hollow: '#52514e' },
+  dark: { ramp: ['#d4ccfa', '#b3a5f4', '#9180ea', '#7059dc', '#5541c4'], stroke: '#1a1a19', hollow: '#c3c2b7' },
 } as const;
+
+/** Bubble radius (px) per class: five sizes far enough apart to read without a key. */
+export const bubbleRadii = [4, 6, 8.5, 11.5, 15] as const;
 
 /** Reserved for state (never a data series); always shown with an icon + label. */
 export const status = {

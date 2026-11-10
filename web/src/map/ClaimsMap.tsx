@@ -1,15 +1,17 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './worker';
-import { useCallback, useMemo, useState } from 'react';
-import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type ViewState } from '@vis.gl/react-maplibre';
-import type { Map as MlMap } from 'maplibre-gl';
-import { circle, distance, point } from '@turf/turf';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type MapRef, type ViewState } from '@vis.gl/react-maplibre';
+import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl';
+import { circle } from '@turf/turf';
 import { MarkerPin02 } from '@untitledui/icons';
 import { useMode } from '../theme/mode';
 import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
-import { brand, bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
+import { bubbleRadii, bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
+import { fmtInt } from '../lib/format';
+import { Card } from '../components/Basics';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
 import { TractTooltip } from '../components/TractTooltip';
 
@@ -20,6 +22,10 @@ export interface ClaimsMapProps {
   breaks: number[];
   retailers: Retailer[];
   claimsByRetailer: Map<string, number>;
+  /** Stores inside the search radius (drawn at full strength; the rest are dimmed). */
+  storesInRadius: Set<string>;
+  /** Class breaks for listed claims per store (see ExplorePage). */
+  bubbleBreaks: number[];
   coverage: Coverage;
   pin: [number, number];
   radiusMiles: number;
@@ -34,16 +40,22 @@ export interface ClaimsMapProps {
   height?: number | string;
 }
 
+/** Class of a group's average listed claims per store; picks label ink against its fill. */
+const classOfAvg = (g: { n: number; stores: number }, breaks: number[]) => classOf(g.n / g.stores, breaks);
+
 const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.income[mode] : ramps.claims[mode]);
 
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
-    tracts, metrics, metric, breaks, retailers, claimsByRetailer, coverage, pin, radiusMiles,
+    tracts, metrics, metric, breaks, retailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, height = '100%',
   } = props;
   const mode = useMode();
   const [hover, setHover] = useState<{ x: number; y: number; geoid: string } | null>(null);
+  const [groupHover, setGroupHover] = useState<{ x: number; y: number; stores: number; n: number } | null>(null);
+  const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
+  const mapRef = useRef<MapRef>(null);
 
   const byGeoid = useMemo(() => new Map(metrics.map((m) => [m.geoid, m])), [metrics]);
 
@@ -67,22 +79,21 @@ export function ClaimsMap(props: ClaimsMapProps) {
     [tracts, byGeoid, metric, breaks],
   );
 
-  // Bubble area scales with listed claims relative to the busiest store in view, so the
-  // largest bubble stays the same size whatever the filters.
-  const { retailerData, maxN } = useMemo(() => {
-    const features = retailers.map((r) => ({
+  // Stores split by radius: inside is drawn at full strength, outside dimmed. Each source
+  // clusters when zoomed out; a group carries its total listed claims (n) and store count.
+  const storeSources = useMemo(() => {
+    const toFeature = (r: Retailer) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
-      properties: {
-        id: r.id,
-        n: claimsByRetailer.get(r.id) ?? 0,
-        inRadius: distance(point([r.lon, r.lat]), point(pin), { units: 'miles' }) <= radiusMiles ? 1 : 0,
-      },
-    }));
-    const maxN = Math.max(1, ...features.filter((f) => f.properties.inRadius).map((f) => f.properties.n));
-    return { retailerData: { type: 'FeatureCollection' as const, features }, maxN };
-  }, [retailers, claimsByRetailer, pin, radiusMiles]);
-  const dim = (op: number) => ['case', ['==', ['get', 'inRadius'], 1], op, op * 0.3];
+      properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0 },
+    });
+    const inside = retailers.filter((r) => storesInRadius.has(r.id)).map(toFeature);
+    const outside = retailers.filter((r) => !storesInRadius.has(r.id)).map(toFeature);
+    return {
+      in: { type: 'FeatureCollection' as const, features: inside },
+      out: { type: 'FeatureCollection' as const, features: outside },
+    };
+  }, [retailers, claimsByRetailer, storesInRadius]);
 
   const radiusRing = useMemo(() => circle(pin, radiusMiles, { units: 'miles', steps: 96 }), [pin, radiusMiles]);
   const coverageRing = useMemo(
@@ -93,6 +104,37 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const ramp = rampFor(metric, mode);
   const fillColor = ['match', ['get', 'cls'], 0, ramp[0], 1, ramp[1], 2, ramp[2], 3, ramp[3], 4, ramp[4], ramp[0]];
   const c = chrome[mode];
+
+  // Bubble classes follow classOf(): a value above break i moves to class i+1.
+  const above = (b: number) => b + 1e-9;
+  const stepBy = (input: unknown, out: readonly (string | number)[]) =>
+    ['step', input, out[0], ...bubbleBreaks.flatMap((b, i) => [above(b), out[i + 1]])];
+  const storeColor = stepBy(['get', 'n'], bubbles[mode].ramp);
+  const storeRadius = stepBy(['get', 'n'], bubbleRadii);
+  // Groups: color by average listed claims per store, size by the total.
+  const groupColor = stepBy(['/', ['get', 'n'], ['get', 'point_count']], bubbles[mode].ramp);
+  const groupRadius = ['interpolate', ['linear'], ['sqrt', ['get', 'n']], 0, 12, 20, 18, 60, 28, 120, 36];
+
+  // Group labels are HTML markers: the offline style has no glyphs for map text.
+  const refreshGroupLabels = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !showBubbles || !map.getSource('stores-in')) return setGroupLabels([]);
+    const seen = new Map<number, { id: number; lon: number; lat: number; n: number; stores: number }>();
+    for (const f of map.querySourceFeatures('stores-in', { filter: ['has', 'point_count'] })) {
+      const p = f.properties as { cluster_id: number; n: number; point_count: number };
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      if (!seen.has(p.cluster_id)) seen.set(p.cluster_id, { id: p.cluster_id, lon, lat, n: p.n, stores: p.point_count });
+    }
+    setGroupLabels([...seen.values()].filter((g) => g.n > 0));
+  }, [showBubbles]);
+
+  const expandGroup = async (clusterId: number, lngLat: [number, number]) => {
+    const map = mapRef.current?.getMap();
+    const src = map?.getSource('stores-in') as GeoJSONSource | undefined;
+    if (!map || !src) return;
+    const zoom = await src.getClusterExpansionZoom(clusterId);
+    map.easeTo({ center: lngLat, zoom: zoom + 0.2 });
+  };
   // Must be referentially stable: a new style object makes MapLibre reload the whole style
   // (every layer) on each render, which flashes the map blank on hover.
   const mapStyle = useMemo(() => baseStyle(mode, basemap), [mode, basemap]);
@@ -115,20 +157,34 @@ export function ClaimsMap(props: ClaimsMapProps) {
   return (
     <div className="relative w-full" style={{ height }}>
       <MapGL
+        ref={mapRef}
         key={mode /* re-create so the hatch matches the theme */}
         initialViewState={{ longitude: pin[0], latitude: pin[1], zoom: 10.4 }}
         {...(viewState ? { ...viewState } : {})}
         onMove={onMove ? (e) => onMove(e.viewState) : undefined}
         mapStyle={mapStyle}
         onLoad={onLoad}
-        interactiveLayerIds={['tract-fill', 'tract-nodata']}
+        interactiveLayerIds={showBubbles ? ['group-in', 'tract-fill', 'tract-nodata'] : ['tract-fill', 'tract-nodata']}
+        onIdle={refreshGroupLabels}
         onMouseMove={(e: MapLayerMouseEvent) => {
           const f = e.features?.[0];
+          if (f?.layer.id === 'group-in') {
+            const p = f.properties as { n: number; point_count: number };
+            setHover(null);
+            setGroupHover({ x: e.point.x, y: e.point.y, n: p.n, stores: p.point_count });
+            return;
+          }
+          setGroupHover(null);
           setHover(f ? { x: e.point.x, y: e.point.y, geoid: String(f.properties?.geoid) } : null);
         }}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={() => { setHover(null); setGroupHover(null); }}
         onClick={(e: MapLayerMouseEvent) => {
           const f = e.features?.[0];
+          if (f?.layer.id === 'group-in') {
+            const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+            void expandGroup(Number(f.properties?.cluster_id), [lon, lat]);
+            return;
+          }
           if (f && onSelectTract) onSelectTract(String(f.properties?.geoid));
         }}
         onDblClick={(e) => {
@@ -176,38 +232,118 @@ export function ClaimsMap(props: ClaimsMapProps) {
           />
         </Source>
         {showBubbles && (
-          <Source id="retailers" type="geojson" data={retailerData}>
+          <>
+          <Source id="stores-out" type="geojson" data={storeSources.out} cluster clusterRadius={36} clusterMaxZoom={12}
+            clusterProperties={{ n: ['+', ['get', 'n']] }}>
             <Layer
-              id="retailer-hollow"
+              id="hollow-out"
               type="circle"
-              filter={['==', ['get', 'n'], 0]}
+              filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
               paint={{
                 'circle-radius': 2.5,
                 'circle-color': 'rgba(0,0,0,0)',
                 'circle-stroke-color': bubbles[mode].hollow,
                 'circle-stroke-width': 1,
-                'circle-stroke-opacity': dim(bubbleOpacity * 0.8) as never,
+                'circle-stroke-opacity': bubbleOpacity * 0.3 * 0.8,
               }}
             />
             <Layer
-              id="retailer-bubble"
+              id="group-out"
               type="circle"
-              filter={['>', ['get', 'n'], 0]}
+              filter={['all', ['has', 'point_count'], ['>', ['get', 'n'], 0]]}
+              layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
               paint={{
-                'circle-radius': ['+', 2.5, ['*', 13, ['sqrt', ['min', 1, ['/', ['get', 'n'], maxN]]]]],
-                'circle-color': bubbles[mode].fill,
-                'circle-opacity': dim(bubbleOpacity * 0.75) as never,
+                'circle-radius': groupRadius as never,
+                'circle-color': groupColor as never,
+                'circle-opacity': bubbleOpacity * 0.3 * 0.9,
+                'circle-stroke-color': bubbles[mode].stroke,
+                'circle-stroke-width': 2,
+                'circle-stroke-opacity': bubbleOpacity * 0.3,
+              }}
+            />
+            <Layer
+              id="store-out"
+              type="circle"
+              filter={['all', ['!', ['has', 'point_count']], ['>', ['get', 'n'], 0]]}
+              layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
+              paint={{
+                'circle-radius': storeRadius as never,
+                'circle-color': storeColor as never,
+                'circle-opacity': bubbleOpacity * 0.3 * 0.9,
                 'circle-stroke-color': bubbles[mode].stroke,
                 'circle-stroke-width': 1,
-                'circle-stroke-opacity': dim(bubbleOpacity) as never,
+                'circle-stroke-opacity': bubbleOpacity * 0.3,
               }}
             />
           </Source>
+          <Source id="stores-in" type="geojson" data={storeSources.in} cluster clusterRadius={36} clusterMaxZoom={12}
+            clusterProperties={{ n: ['+', ['get', 'n']] }}>
+            <Layer
+              id="hollow-in"
+              type="circle"
+              filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
+              paint={{
+                'circle-radius': 2.5,
+                'circle-color': 'rgba(0,0,0,0)',
+                'circle-stroke-color': bubbles[mode].hollow,
+                'circle-stroke-width': 1,
+                'circle-stroke-opacity': bubbleOpacity * 0.8,
+              }}
+            />
+            <Layer
+              id="group-in"
+              type="circle"
+              filter={['all', ['has', 'point_count'], ['>', ['get', 'n'], 0]]}
+              layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
+              paint={{
+                'circle-radius': groupRadius as never,
+                'circle-color': groupColor as never,
+                'circle-opacity': bubbleOpacity * 0.9,
+                'circle-stroke-color': bubbles[mode].stroke,
+                'circle-stroke-width': 2,
+                'circle-stroke-opacity': bubbleOpacity,
+              }}
+            />
+            <Layer
+              id="store-in"
+              type="circle"
+              filter={['all', ['!', ['has', 'point_count']], ['>', ['get', 'n'], 0]]}
+              layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
+              paint={{
+                'circle-radius': storeRadius as never,
+                'circle-color': storeColor as never,
+                'circle-opacity': bubbleOpacity * 0.9,
+                'circle-stroke-color': bubbles[mode].stroke,
+                'circle-stroke-width': 1,
+                'circle-stroke-opacity': bubbleOpacity,
+              }}
+            />
+          </Source>
+          </>
         )}
+        {showBubbles && groupLabels.map((g) => (
+          <Marker key={g.id} longitude={g.lon} latitude={g.lat} anchor="center" style={{ pointerEvents: 'none' }}>
+            <span className="text-[11px] font-semibold tabular" style={{ color: classOfAvg(g, bubbleBreaks) >= 2 ? '#fff' : '#0a0a0a' }}>
+              {g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}
+            </span>
+          </Marker>
+        ))}
         <Marker longitude={pin[0]} latitude={pin[1]} anchor="bottom">
-          <MarkerPin02 className="size-8" style={{ color: brand.primary[mode], filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.35))' }} />
+          {/* Ink, not purple: the pin must stand out against the purple store bubbles. */}
+          <MarkerPin02 className="size-8" strokeWidth={2.5}
+            style={{ color: c.ink, filter: `drop-shadow(0 0 1.5px ${c.surfaceRaised}) drop-shadow(0 1px 1px rgba(0,0,0,.35))` }} />
         </Marker>
       </MapGL>
+      {groupHover && (
+        <div className="pointer-events-none absolute z-[2]" style={{ left: groupHover.x + 14, top: groupHover.y + 14 }}>
+          <Card className="w-[240px] p-3">
+            <p className="text-sm font-semibold text-primary tabular">{fmtInt(groupHover.stores)} stores grouped</p>
+            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(groupHover.n)} listed claims (over $600)</p>
+            <p className="text-xs text-tertiary tabular">{(groupHover.n / groupHover.stores).toFixed(1)} per store on average</p>
+            <p className="mt-2 text-xs text-tertiary">Click or zoom in to see each store.</p>
+          </Card>
+        </div>
+      )}
       {hover && hovered && hoveredProps && (
         <div className="pointer-events-none absolute z-[2]" style={{ left: hover.x + 14, top: hover.y + 14 }}>
           <TractTooltip tract={hoveredProps} metrics={hovered} coverage={coverage} />

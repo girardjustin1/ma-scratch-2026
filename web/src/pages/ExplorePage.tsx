@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
+import { distance, point } from '@turf/turf';
 import { countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
@@ -57,8 +58,21 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
     const breaks = metric === 'claims' ? countBreaks(values, 5) : quantileBreaks(values, 5);
     const claimsByRetailer = new Map<string, number>();
     for (const c of claims) claimsByRetailer.set(c.retailerId, (claimsByRetailer.get(c.retailerId) ?? 0) + 1);
+    // Store classes for the bubbles: quantile breaks over in-radius stores with listed claims,
+    // so one outlier store cannot shrink every other bubble.
+    const here = point(filters.pin);
+    const storesInRadius = new Set(
+      data.retailers.filter((r) => distance(point([r.lon, r.lat]), here, { units: 'miles' }) <= filters.radiusMiles).map((r) => r.id),
+    );
+    const storeCounts = [...storesInRadius].map((id) => claimsByRetailer.get(id) ?? 0).filter((n) => n > 0);
+    const bubbleScale = {
+      breaks: countBreaks(storeCounts, 5),
+      min: storeCounts.length ? Math.min(...storeCounts) : 0,
+      max: storeCounts.length ? Math.max(...storeCounts) : 0,
+      stores: storeCounts.length,
+    };
     return {
-      claims, metrics, breaks, claimsByRetailer, claimCounts: gameCountsInRadius(data, filters, metrics),
+      claims, metrics, breaks, claimsByRetailer, storesInRadius, bubbleScale, claimCounts: gameCountsInRadius(data, filters, metrics),
       min: values.length ? Math.min(...values) : 0,
       max: values.length ? Math.max(...values) : 0,
       tractCount: shown.length,
@@ -70,11 +84,11 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
 }
 
 export function ExplorePage({
-  data, initialFilters, initialMetric = 'claims', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
+  data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
 }: ExplorePageProps) {
   const [filters, setFilters] = useState(initialFilters);
   const [metric, setMetric] = useState<MetricKey>(initialMetric);
-  const [metricB, setMetricB] = useState<MetricKey>('income');
+  const [metricB, setMetricB] = useState<MetricKey>(initialMetric === 'income' ? 'claims' : 'income');
   const [compare, setCompare] = useState(initialCompare);
   const [selected, setSelected] = useState<string | undefined>(initialSelected);
   const [layers, setLayers] = useState({ tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
@@ -126,6 +140,7 @@ export function ExplorePage({
       <div className="grid min-h-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
         <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
+            storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks}
             viewState={view} onMove={setView} />
           {!compare && (
             <div className={controlsBox}>
@@ -133,7 +148,8 @@ export function ExplorePage({
             </div>
           )}
           <div className={legendBox}>
-            <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage} />
+            <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
+              bubbles={layers.showBubbles ? a.bubbleScale : undefined} />
           </div>
           <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
             Double-click to move the pin · click a tract for its listed claims
@@ -142,12 +158,14 @@ export function ExplorePage({
         {compare && (
           <div className="relative min-h-0">
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
+              storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks}
               viewState={view} onMove={setView} />
             <div className={controlsBox}>
               <div className="rounded-lg bg-primary p-1 shadow-xs ring-1 ring-secondary"><MetricSwitcher value={metricB} onChange={setMetricB} /></div>
             </div>
             <div className={legendBox}>
-              <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage} />
+              <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage}
+                bubbles={layers.showBubbles ? b.bubbleScale : undefined} />
             </div>
           </div>
         )}
