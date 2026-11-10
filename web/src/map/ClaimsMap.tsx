@@ -4,12 +4,11 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type MapRef, type ViewState } from '@vis.gl/react-maplibre';
 import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl';
 import { circle } from '@turf/turf';
-import { MarkerPin02 } from '@untitledui/icons';
 import { useMode } from '../theme/mode';
 import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
-import { bubbleRadii, bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
+import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode } from '../theme/tokens';
 import { fmtInt } from '../lib/format';
 import { Card } from '../components/Basics';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
@@ -328,10 +327,15 @@ export function ClaimsMap(props: ClaimsMapProps) {
             </span>
           </Marker>
         ))}
-        <Marker longitude={pin[0]} latitude={pin[1]} anchor="bottom">
-          {/* Ink, not purple: the pin must stand out against the purple store bubbles. */}
-          <MarkerPin02 className="size-8" strokeWidth={2.5}
-            style={{ color: c.ink, filter: `drop-shadow(0 0 1.5px ${c.surfaceRaised}) drop-shadow(0 1px 1px rgba(0,0,0,.35))` }} />
+        <Marker longitude={pin[0]} latitude={pin[1]} anchor="center" style={{ pointerEvents: 'none' }}>
+          <span className="relative grid size-4 place-items-center" aria-label="Search pin" role="img">
+            <span className="pin-pulse absolute inset-0 rounded-full"
+              style={{ backgroundColor: `${pinColor[mode]}66`, boxShadow: `0 0 0 1.5px rgba(255,255,255,.9), inset 0 0 0 1.5px ${pinColor[mode]}` }} />
+            <span
+              className="relative size-4 rounded-full border-[3px] border-white"
+              style={{ backgroundColor: pinColor[mode], boxShadow: '0 1px 4px rgba(0,0,0,.45)' }}
+            />
+          </span>
         </Marker>
       </MapGL>
       {groupHover && (

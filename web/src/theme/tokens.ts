@@ -68,6 +68,12 @@ export const bubbles = {
   dark: { ramp: ['#d4ccfa', '#b3a5f4', '#9180ea', '#7059dc', '#5541c4'], stroke: '#1a1a19', hollow: '#c3c2b7' },
 } as const;
 
+/**
+ * The search pin: a location-style blue dot with a white ring and a pulse. The white ring
+ * and shadow keep it readable on the blue income tracts and the purple bubbles.
+ */
+export const pin = { light: '#1a73e8', dark: '#4c8df6' } as const;
+
 /** Bubble radius (px) per class: five sizes far enough apart to read without a key. */
 export const bubbleRadii = [4, 6, 8.5, 11.5, 15] as const;
 

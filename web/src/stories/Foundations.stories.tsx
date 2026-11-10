@@ -6,7 +6,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { ProgressBar } from '@/components/base/progress-indicators/progress-indicators';
 import { Toggle } from '@/components/base/toggle/toggle';
-import { bubbles, chrome, noData, ramps, status } from '../theme/tokens';
+import { bubbles, chrome, noData, pin as pinColor, ramps, status } from '../theme/tokens';
 import { useMode } from '../theme/mode';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { Card, SampleTag } from '../components/Basics';
@@ -199,7 +199,7 @@ export const MapColors: StoryObj = {
         <Row title="No data, hollow stores and pin">
           <Swatch fill={nd.fill} label={`${LABELS.noData} (hatched)`} pattern={`repeating-linear-gradient(135deg, ${nd.line} 0 1.5px, ${nd.fill} 1.5px 5px)`} />
           <Swatch fill={bubbles[mode].hollow} label="No listed claims (hollow)" />
-          <Swatch fill={chrome[mode].ink} label="Pin (ink, stands out from bubbles)" />
+          <Swatch fill={pinColor[mode]} label="Search pin (blue dot, white ring, pulse)" />
         </Row>
         <Row title="Low match rate outline" note="Dashed tract outline where under 80% of claims matched a store. Legend pairs it with a warning icon and words.">
           <div className="flex w-[220px] flex-col gap-1">
