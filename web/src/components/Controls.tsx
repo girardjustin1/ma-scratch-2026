@@ -10,7 +10,6 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 import { Button } from '@/components/base/buttons/button';
 import { InputDateBase } from '@/components/base/input/input-date';
 import { Label } from '@/components/base/input/label';
-import { MultiSelect } from '@/components/base/select/multi-select';
 import { Select } from '@/components/base/select/select';
 import { Slider } from '@/components/base/slider/slider';
 import { Toggle } from '@/components/base/toggle/toggle';
@@ -21,7 +20,7 @@ import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtDate, fmtRange } from '../lib/format';
 import { MAPBOX_TOKEN, type Basemap } from '../map/mapStyle';
 import { Card } from './Basics';
-import { GamePicker, UNKNOWN_PRICE } from './GamePicker';
+import { GamePicker } from './GamePicker';
 
 /** Selected item reads darker than the rest: monochrome, no brand tint. */
 const SELECTED = 'selected:bg-tertiary selected:text-primary';
@@ -181,17 +180,20 @@ export interface FilterBarProps {
 }
 
 const NO_COUNTS = new Map<string, number>();
-const priceLabel = (p: number) => (p === UNKNOWN_PRICE ? 'Unknown' : `$${p}`);
+
+/** Top of the claims-per-store slider; reaching it means "and up" (shown as 99+). */
+export const STORE_CLAIMS_MAX = 100;
+
+export function storeRangeLabel([lo, hi]: [number, number]) {
+  const top = hi >= STORE_CLAIMS_MAX ? `${STORE_CLAIMS_MAX - 1}+` : String(hi);
+  if (lo === 0 && hi >= STORE_CLAIMS_MAX) return 'all';
+  return lo === hi ? String(lo) : `${lo} – ${top}`;
+}
 
 /** One row of filters above the map. Dates are Lottery-listed dates, day granularity. */
 export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset, claimCounts }: FilterBarProps) {
-  const prices = [...new Set(games.map((g) => g.price).filter((p): p is number => p !== null))].sort((a, b) => a - b);
-  const hasUnknown = games.some((g) => g.price === null);
-  const priceItems = [
-    ...prices.map((p) => ({ id: p, label: `$${p}` })),
-    ...(hasUnknown ? [{ id: UNKNOWN_PRICE, label: 'Price unknown' }] : []),
-  ];
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const storeClaims = filters.storeClaims ?? [0, STORE_CLAIMS_MAX];
   return (
     <div className="flex flex-wrap items-end gap-3">
       <ListedDatePicker
@@ -199,20 +201,10 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset,
         onChange={(dateFrom, dateTo) => set({ dateFrom, dateTo })}
       />
       <GamePicker
-        games={games} value={filters.gameIds} onChange={(gameIds) => set({ gameIds })} prices={filters.prices}
+        games={games} value={filters.gameIds} onChange={(gameIds) => set({ gameIds })}
+        prices={filters.prices} onPricesChange={(prices) => set({ prices })}
         claimCounts={claimCounts ?? NO_COUNTS}
       />
-      <MultiSelect
-        size="sm" label="Ticket price" placeholder="All prices" className="w-40" popoverClassName="min-w-48"
-        items={priceItems} showSearch={false}
-        selectedKeys={new Set(filters.prices)}
-        onSelectionChange={(keys) => set({ prices: keys === 'all' ? priceItems.map((i) => i.id) : [...keys].map(Number) })}
-        selectedCountFormatter={() => filters.prices.map(priceLabel).join(', ')}
-        onReset={() => set({ prices: [] })}
-        onSelectAll={() => set({ prices: priceItems.map((i) => i.id) })}
-      >
-        {(item) => <MultiSelect.Item id={item.id} label={item.label} selectionIndicator="checkbox" selectionIndicatorAlign="left" />}
-      </MultiSelect>
       <Select
         size="sm" label="Prize size" className="w-48"
         items={BANDS.map((b) => ({ id: b.value, label: b.label }))}
@@ -234,6 +226,21 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset,
             onChange={(v) => set({ radiusMiles: v as number })} aria-label="Radius in miles"
             formatOptions={{ style: 'unit', unit: 'mile', maximumFractionDigits: 1 }}
             labelFormatter={(v) => `${v} mi`} className="w-full"
+          />
+        </div>
+      </div>
+      <div className="flex w-52 flex-col gap-1.5 px-1">
+        <Tooltip title="Shows only stores with this many listed claims in the current filters. 0 includes stores with none. Tract colors are not affected.">
+          <TooltipTrigger className="flex cursor-default items-center gap-1 text-sm font-medium text-secondary">
+            Claims per store · <span className="tabular">{storeRangeLabel(storeClaims)}</span>
+            <InfoCircle className="size-4 text-fg-quaternary" aria-hidden />
+          </TooltipTrigger>
+        </Tooltip>
+        <div className="flex h-9 items-center">
+          <Slider
+            minValue={0} maxValue={STORE_CLAIMS_MAX} step={1} value={storeClaims}
+            onChange={(v) => set({ storeClaims: v as [number, number] })} aria-label="Listed claims per store"
+            labelFormatter={(v) => (v >= STORE_CLAIMS_MAX ? `${STORE_CLAIMS_MAX - 1}+` : String(v))} className="w-full"
           />
         </div>
       </div>

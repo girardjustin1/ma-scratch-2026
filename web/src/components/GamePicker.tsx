@@ -1,5 +1,5 @@
 import { Fragment, useId, useMemo, useState } from 'react';
-import { ChevronDown, FilterLines, SearchLg, SwitchVertical01 } from '@untitledui/icons';
+import { ChevronDown, FilterLines, SearchLg, SwitchVertical01, Ticket01 } from '@untitledui/icons';
 import {
   Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Header as AriaHeader,
   ListBox as AriaListBox, ListBoxItem as AriaListBoxItem, ListBoxSection as AriaListBoxSection,
@@ -39,7 +39,11 @@ function buildFacets(games: GameRef[]): Facet[] {
   const facets: Facet[] = [
     {
       key: 'price', label: 'Price',
-      options: prices.map((p) => ({ id: String(p), label: `$${p}`, test: (g) => g.price === p })),
+      options: [
+        ...prices.map((p) => ({ id: String(p), label: `$${p}`, test: (g: GameRef) => g.price === p })),
+        ...(games.some((g) => g.price === null)
+          ? [{ id: String(UNKNOWN_PRICE), label: 'Price unknown', test: (g: GameRef) => g.price === null }] : []),
+      ],
     },
     {
       key: 'left', label: 'Prizes left',
@@ -178,6 +182,9 @@ function FilterChips({ facets, selection, setSelection, counts }: {
         {active > 0 && <Button size="sm" color="link-gray" onClick={() => setSelection({})}>Clear filters</Button>}
       </div>
       {open && (
+        <p className="text-xs text-tertiary">Price chips also filter the map. The other chips narrow this list; use Select shown to map those games.</p>
+      )}
+      {open && (
         <div className="grid grid-cols-[96px_1fr] items-start gap-x-3 gap-y-2">
           {facets.map((f) => (
             <Fragment key={f.key}>
@@ -205,6 +212,18 @@ function Metric({ value, label, muted }: { value: string; label: string; muted?:
   );
 }
 
+/** Ticket art at 2:1, or a gray placeholder with a ticket icon when there is none. */
+function TicketThumb({ src }: { src?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="grid h-9 w-[72px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset">
+      {src && !failed
+        ? <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
+        : <Ticket01 className="size-4 text-fg-quaternary" aria-hidden />}
+    </span>
+  );
+}
+
 function GameRow({ g, claims }: { g: GameRef; claims: number }) {
   const p = g.prizes;
   const meta = [
@@ -224,6 +243,7 @@ function GameRow({ g, claims }: { g: GameRef; claims: number }) {
       {({ isSelected }) => (
         <>
           <CheckboxBase size="sm" isSelected={isSelected} />
+          <TicketThumb src={g.image} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <AriaText slot="label" className="truncate text-sm font-medium text-primary">{g.name}</AriaText>
@@ -244,8 +264,9 @@ export interface GamePickerProps {
   games: GameRef[];
   value: string[];
   onChange: (ids: string[]) => void;
-  /** The Ticket price filter: the list shows only these prices when set. */
+  /** The map's ticket-price filter, shown and edited as the Price chips. */
   prices: number[];
+  onPricesChange?: (prices: number[]) => void;
   /** Listed claims per game inside the radius, under the current date and prize filters. */
   claimCounts: Map<string, number>;
 }
@@ -254,21 +275,29 @@ export interface GamePickerProps {
  * Game filter for the map: search, on-sale toggle, sort, and grouping by ticket price.
  * Unclaimed-prize counts are statewide and never imply what any store holds.
  */
-export function GamePicker({ games, value, onChange, prices, claimCounts }: GamePickerProps) {
+export function GamePicker({ games, value, onChange, prices, onPricesChange, claimCounts }: GamePickerProps) {
   const labelId = useId();
   const [query, setQuery] = useState('');
   const hasSaleInfo = games.some((g) => g.onSale !== undefined);
   const [onSaleOnly, setOnSaleOnly] = useState(hasSaleInfo);
   const [sort, setSort] = useState<GameSort>(games.some((g) => g.prizes) ? 'unclaimed' : 'claims');
   const [groupByPrice, setGroupByPrice] = useState(true);
-  const [selection, setSelection] = useState<FacetSelection>({});
+  // Price chips are the map's ticket-price filter (they change the map); every other chip
+  // only narrows this list. The local state holds the non-price chips.
+  const [localSel, setLocalSel] = useState<FacetSelection>({});
+  const selection: FacetSelection = useMemo(() => ({ ...localSel, price: prices.map(String) }), [localSel, prices]);
+  const setSelection = (next: FacetSelection) => {
+    const { price = [], ...rest } = next;
+    setLocalSel(rest);
+    if (onPricesChange && price.join() !== prices.map(String).join()) onPricesChange(price.map(Number));
+  };
 
   const asOf = games.find((g) => g.prizes)?.prizes?.asOf;
   // Launch ages count back from the prize-table date (else the newest launch), never "today".
   const anchor = asOf ?? games.reduce((m, g) => (g.launchDate && g.launchDate > m ? g.launchDate : m), '0000-01-01');
   const facetList = useMemo(() => buildFacets(games), [games]);
   const ctx = useMemo(() => ({ claimCounts, anchor }), [claimCounts, anchor]);
-  const base = useMemo(() => baseFilter(games, query, onSaleOnly, prices), [games, query, onSaleOnly, prices]);
+  const base = useMemo(() => baseFilter(games, query, onSaleOnly, []), [games, query, onSaleOnly]);
   // A chip's count = games left if it were the only choice in its row, given every other row.
   const counts = (key: string, id: string) => {
     const opt = facetList.find((f) => f.key === key)?.options.find((o) => o.id === id);
@@ -277,16 +306,17 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
 
   const { total, groups } = useMemo(
     () => arrangeGames({
-      games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice,
+      games, sort, query, onSaleOnly, prices: [], claimCounts, groupByPrice,
       facets: { list: facetList, selection, ctx },
     }),
-    [games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice, facetList, selection, ctx],
+    [games, sort, query, onSaleOnly, claimCounts, groupByPrice, facetList, selection, ctx],
   );
   const onSaleCount = games.filter((g) => g.onSale).length;
   const shownIds = groups.flatMap((gr) => gr.games.map((g) => g.id));
 
+  const priceText = prices.map((p) => (p === UNKNOWN_PRICE ? 'unknown-price' : `$${p}`)).join(', ');
   const display =
-    value.length === 0 ? 'All games' : value.length === 1 ? (games.find((g) => g.id === value[0])?.name ?? '1 game') : `${value.length} games`;
+    value.length === 0 ? (prices.length ? `All ${priceText} games` : 'All games') : value.length === 1 ? (games.find((g) => g.id === value[0])?.name ?? '1 game') : `${value.length} games`;
 
   const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} />);
 
@@ -348,11 +378,6 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
                   <div className="border-t border-secondary pt-3">
                     <FilterChips facets={facetList} selection={selection} setSelection={setSelection} counts={counts} />
                   </div>
-                  {prices.length > 0 && (
-                    <p className="text-xs text-tertiary">
-                      Showing {prices.map((p) => (p === UNKNOWN_PRICE ? 'unknown-price' : `$${p}`)).join(', ')} games, set by the Ticket price filter.
-                    </p>
-                  )}
                 </div>
                 <AriaListBox
                   aria-label="Games" selectionMode="multiple" selectedKeys={new Set(value)}
@@ -381,7 +406,7 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
                   </CaveatNote>
                   <div className="flex items-center gap-2">
                     <p className="flex-1 text-xs text-tertiary tabular">
-                      {value.length ? `${value.length} selected` : 'No game selected: the map shows all games'} · {total} shown
+                      {value.length ? `${value.length} selected` : `No game selected: the map shows ${prices.length ? `all ${priceText} games` : 'all games'}`} · {total} shown
                       {total > 0 && value.length === 0 && Object.values(selection).some((v) => v.length) && ' · Select shown to map them'}
                     </p>
                     <Button size="sm" color="secondary" isDisabled={!shownIds.length}

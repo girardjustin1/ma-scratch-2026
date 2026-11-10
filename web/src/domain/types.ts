@@ -60,6 +60,8 @@ export interface GameRef {
   prizes?: GamePrizes | null;
   /** The Lottery's catalog tags: new, ending (sales ending soon), secondChance, scan. */
   tags?: string[];
+  /** Ticket art (2:1 tile), served locally; null/undefined when there is none. */
+  image?: string | null;
 }
 
 /** Statewide counts from the Lottery's prize table. Never per store. */
@@ -114,6 +116,8 @@ export interface Filters {
   gameIds: string[];
   prices: number[];
   prizeBand: PrizeBand;
+  /** Stores shown on the map by listed claims: [min, max]; max STORE_CLAIMS_MAX means "and up". */
+  storeClaims?: [number, number];
   pin: [number, number];
   radiusMiles: number;
 }

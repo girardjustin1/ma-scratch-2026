@@ -150,6 +150,7 @@ export function ExplorePage({
     basemap: online ? layers.basemap : ('outline' as const),
     onPinChange: (pin: [number, number]) => setFilters({ ...filters, pin }),
     selection,
+    storeRange: filters.storeClaims,
     onSelectTract: (geoid: string, lngLat: [number, number]) => setSelection({ kind: 'tract', geoid, lngLat }),
     onSelectStore: selectStore,
     onClearSelection: clear,

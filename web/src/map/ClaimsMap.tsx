@@ -12,6 +12,7 @@ import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode
 import { fmtInt } from '../lib/format';
 import { Card } from '../components/Basics';
 import { StorePin } from './StorePin';
+import { STORE_CLAIMS_MAX } from '../components/Controls';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
 import { TractTooltip } from '../components/TractTooltip';
 
@@ -26,6 +27,8 @@ export interface ClaimsMapProps {
   storesInRadius: Set<string>;
   /** Class breaks for listed claims per store (see ExplorePage). */
   bubbleBreaks: number[];
+  /** Only stores whose listed claims fall in [min, max] are drawn; max >= storeRangeTop means no cap. */
+  storeRange?: [number, number];
   coverage: Coverage;
   pin: [number, number];
   radiusMiles: number;
@@ -91,7 +94,8 @@ const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.
 
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
-    tracts, metrics, metric, breaks, retailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
+    tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
+    storeRange = [0, STORE_CLAIMS_MAX],
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
     height = '100%',
@@ -101,11 +105,17 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const [groupHover, setGroupHover] = useState<{ x: number; y: number; stores: number; n: number } | null>(null);
   const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
   const mapRef = useRef<MapRef>(null);
+  // Stores in the claims-per-store range: bubbles, groups and pins all draw from this list.
+  const [lo, hi] = storeRange;
+  const retailers = useMemo(() => allRetailers.filter((r) => {
+    const n = claimsByRetailer.get(r.id) ?? 0;
+    return n >= lo && (hi >= STORE_CLAIMS_MAX || n <= hi);
+  }), [allRetailers, claimsByRetailer, lo, hi]);
   const [storeHover, setStoreHover] = useState<{ x: number; y: number; id: string } | null>(null);
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const zoom = viewState?.zoom ?? 10.4;
-  const storeById = useMemo(() => new Map(retailers.map((r) => [r.id, r])), [retailers]);
+  const storeById = useMemo(() => new Map(allRetailers.map((r) => [r.id, r])), [allRetailers]);
 
   const byGeoid = useMemo(() => new Map(metrics.map((m) => [m.geoid, m])), [metrics]);
 

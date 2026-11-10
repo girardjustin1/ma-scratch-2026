@@ -20,6 +20,7 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[1]
 P = ROOT / "data/processed"
 OUT = ROOT / "web/public/local/view.json"
+TILES = ROOT / "web/public/local/tiles"
 TRACT_RADIUS_MI = 12  # draw a ring of no-data tracts beyond the 10 mi coverage edge
 COVERAGE_MI = 10  # the retailer sweep is proven complete to this radius
 RELEASE = "2020-2024"
@@ -130,7 +131,10 @@ def main():
                 # The Lottery's own catalog tags, shortened: new, ending (sales ending soon),
                 # secondChance, scan (scan to enter).
                 "tags": sorted({TAGS[t] for t in (cat or {}).get("tags") or [] if t in TAGS}),
-                "prizes": prizes.get(g)}
+                "prizes": prizes.get(g),
+                # Ticket art from scripts/fetch_game_tiles.py, served from the gitignored
+                # web/public/local/tiles; None when no tile was downloaded.
+                "image": f"/local/tiles/{g}.webp" if (TILES / f"{g}.webp").exists() else None}
 
     games = [meta(g) for g in game_ids]
     gidx = {g: i for i, g in enumerate(game_ids)}
