@@ -70,8 +70,15 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
       data.retailers.filter((r) => distance(point([r.lon, r.lat]), here, { units: 'miles' }) <= filters.radiusMiles).map((r) => r.id),
     );
     const storeCounts = [...storesInRadius].map((id) => claimsByRetailer.get(id) ?? 0).filter((n) => n > 0);
+    // "Hottest" stores: the top 3% of in-radius stores with listed claims, always above the
+    // top class's lower edge. null when there are too few stores for a top 3% to mean much.
+    const sortedCounts = [...storeCounts].sort((x, y) => x - y);
+    const storeBreaks = storeCountBreaks(storeCounts);
+    const p97 = sortedCounts.length >= 30 ? sortedCounts[Math.floor(0.97 * (sortedCounts.length - 1))] : null;
+    const hotMin = p97 === null ? null : Math.max(p97, (storeBreaks[storeBreaks.length - 1] ?? 0) + 2);
     const bubbleScale = {
-      breaks: storeCountBreaks(storeCounts),
+      hotMin,
+      breaks: storeBreaks,
       min: storeCounts.length ? Math.min(...storeCounts) : 0,
       max: storeCounts.length ? Math.max(...storeCounts) : 0,
       stores: storeCounts.length,
@@ -129,7 +136,8 @@ export function ExplorePage({
     .filter((r) => r.lon >= bounds[0] && r.lon <= bounds[2] && r.lat >= bounds[1] && r.lat <= bounds[3])
     .map((r) => {
       const n = a.claimsByRetailer.get(r.id) ?? 0;
-      return { id: r.id, name: r.name, town: r.town, n, cls: n > 0 ? classOf(n, a.bubbleScale.breaks) : -1 };
+      const hot = a.bubbleScale.hotMin !== null && n >= a.bubbleScale.hotMin;
+      return { id: r.id, name: r.name, town: r.town, n, cls: hot ? 5 : n > 0 ? classOf(n, a.bubbleScale.breaks) : -1 };
     })
     .filter((st) => st.n >= lo && (hi >= STORE_CLAIMS_MAX || st.n <= hi))
     .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name));
@@ -209,7 +217,7 @@ export function ExplorePage({
       <div className="grid min-h-0 min-w-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
         <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
-            storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks}
+            storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
             viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds} />
           {!compare && (
             <div className={controlsBox}>
@@ -227,7 +235,7 @@ export function ExplorePage({
         {compare && (
           <div className="relative min-h-0">
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
-              storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks}
+              storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks} hotMin={b.bubbleScale.hotMin}
               viewState={view} onMove={setView} />
             <div className={controlsBox}>
               <div className="rounded-lg bg-primary p-1 shadow-xs ring-1 ring-secondary"><MetricSwitcher value={metricB} onChange={setMetricB} /></div>

@@ -7,9 +7,9 @@ import { cx } from '@/utils/cx';
  * The name sits to the right with a halo so it reads on any tract color.
  */
 export function StorePin({
-  n, color, ink, name, showName, selected, onClick,
+  n, hot = false, color, ink, name, showName, selected, onClick,
 }: {
-  n: number; color: string; ink: 'light' | 'dark'; name: string; showName: boolean; selected: boolean; onClick: () => void;
+  n: number; hot?: boolean; color: string; ink: 'light' | 'dark'; name: string; showName: boolean; selected: boolean; onClick: () => void;
 }) {
   const winner = n > 0;
   const size = winner ? 30 : 22;
@@ -18,7 +18,7 @@ export function StorePin({
       type="button"
       onClick={onClick}
       className="group flex cursor-pointer items-center gap-1 outline-hidden"
-      aria-label={`${name}: ${n} listed claims`}
+      aria-label={`${name}: ${n} listed claims${hot ? ', among the hottest stores' : ''}`}
     >
       <span className="relative block" style={{ width: size, height: size * 1.25 }}>
         <svg viewBox="0 0 24 30" width={size} height={size * 1.25} className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" aria-hidden>
@@ -29,6 +29,9 @@ export function StorePin({
             strokeWidth={selected ? 2.5 : 1.5}
           />
         </svg>
+        {hot && (
+          <span className="absolute -top-2 -right-2 text-[14px] leading-none drop-shadow-[0_0_2px_rgba(255,255,255,0.9)]" aria-hidden>🔥</span>
+        )}
         <span className="absolute inset-x-0 top-0 grid place-items-center" style={{ height: size }}>
           {winner ? (
             <span className={cx('text-[11px] leading-none font-bold tabular', ink === 'light' ? 'text-white' : 'text-neutral-950')}>

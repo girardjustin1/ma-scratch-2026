@@ -26,7 +26,9 @@ export interface ClaimsMapProps {
   bubbleBreaks: number[];
   /** Only stores whose listed claims fall in [min, max] are drawn; max >= storeRangeTop means no cap. */
   storeRange?: [number, number];
-  /** Store classes switched off in the legend (0–4 by bubbleBreaks; -1 = no listed claims). */
+  /** Listed claims at or above which a store is "hottest" (🔥); null = none. */
+  hotMin?: number | null;
+  /** Store classes switched off in the legend (0–4 by bubbleBreaks; 5 = hottest; -1 = no listed claims). */
   hiddenClasses?: Set<number>;
   /** Called with the visible bounds [west, south, east, north] whenever the map settles. */
   onBounds?: (b: [number, number, number, number]) => void;
@@ -96,22 +98,25 @@ const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
     tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
-    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds,
+    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds, hotMin = null,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
     height = '100%',
   } = props;
   const mode = useMode();
   const [cursor, setCursor] = useState('grab');
-  const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
+  const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number; hot: number }[]>([]);
+  const [hotSingles, setHotSingles] = useState<{ id: string; lon: number; lat: number; n: number }[]>([]);
   const mapRef = useRef<MapRef>(null);
   // Stores in the claims-per-store range: bubbles, groups and pins all draw from this list.
   const [lo, hi] = storeRange;
   const retailers = useMemo(() => allRetailers.filter((r) => {
     const n = claimsByRetailer.get(r.id) ?? 0;
-    if (hiddenClasses?.size && hiddenClasses.has(n > 0 ? classOf(n, bubbleBreaks) : -1)) return false;
+    const cls = hotMin !== null && n >= hotMin ? 5 : n > 0 ? classOf(n, bubbleBreaks) : -1;
+    if (hiddenClasses?.size && hiddenClasses.has(cls)) return false;
     return n >= lo && (hi >= STORE_CLAIMS_MAX || n <= hi);
-  }), [allRetailers, claimsByRetailer, lo, hi, hiddenClasses, bubbleBreaks]);
+  }), [allRetailers, claimsByRetailer, lo, hi, hiddenClasses, bubbleBreaks, hotMin]);
+  const isHot = (n: number) => hotMin !== null && n >= hotMin;
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const zoom = viewState?.zoom ?? 10.4;
@@ -145,7 +150,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     const toFeature = (r: Retailer) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
-      properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0 },
+      properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0, hot: isHot(claimsByRetailer.get(r.id) ?? 0) ? 1 : 0 },
     });
     const inside = retailers.filter((r) => storesInRadius.has(r.id)).map(toFeature);
     const outside = retailers.filter((r) => !storesInRadius.has(r.id)).map(toFeature);
@@ -153,7 +158,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
       in: { type: 'FeatureCollection' as const, features: inside },
       out: { type: 'FeatureCollection' as const, features: outside },
     };
-  }, [retailers, claimsByRetailer, storesInRadius]);
+  }, [retailers, claimsByRetailer, storesInRadius, hotMin]);
 
   const radiusRing = useMemo(() => circle(pin, radiusMiles, { units: 'miles', steps: 96 }), [pin, radiusMiles]);
   const coverageRing = useMemo(
@@ -178,14 +183,22 @@ export function ClaimsMap(props: ClaimsMapProps) {
   // Group labels are HTML markers: the offline style has no glyphs for map text.
   const refreshGroupLabels = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !showBubbles || !map.getSource('stores-in')) return setGroupLabels([]);
-    const seen = new Map<number, { id: number; lon: number; lat: number; n: number; stores: number }>();
+    if (!map || !showBubbles || !map.getSource('stores-in')) { setHotSingles([]); return setGroupLabels([]); }
+    const seen = new Map<number, { id: number; lon: number; lat: number; n: number; stores: number; hot: number }>();
     for (const f of map.querySourceFeatures('stores-in', { filter: ['has', 'point_count'] })) {
-      const p = f.properties as { cluster_id: number; n: number; point_count: number };
+      const p = f.properties as { cluster_id: number; n: number; point_count: number; hot: number };
       const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
-      if (!seen.has(p.cluster_id)) seen.set(p.cluster_id, { id: p.cluster_id, lon, lat, n: p.n, stores: p.point_count });
+      if (!seen.has(p.cluster_id)) seen.set(p.cluster_id, { id: p.cluster_id, lon, lat, n: p.n, stores: p.point_count, hot: p.hot ?? 0 });
     }
     setGroupLabels([...seen.values()].filter((g) => g.n > 0));
+    // Hottest stores drawn on their own (not grouped) get a 🔥 badge on the bubble.
+    const singles = new Map<string, { id: string; lon: number; lat: number; n: number }>();
+    for (const f of map.querySourceFeatures('stores-in', { filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'hot'], 1]] })) {
+      const p = f.properties as { id: string; n: number };
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      singles.set(p.id, { id: p.id, lon, lat, n: p.n });
+    }
+    setHotSingles([...singles.values()]);
   }, [showBubbles]);
 
   const expandGroup = async (clusterId: number, lngLat: [number, number]) => {
@@ -346,7 +359,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
         {showBubbles && (
           <>
           <Source id="stores-out" type="geojson" data={storeSources.out} cluster clusterRadius={36} clusterMaxZoom={12}
-            clusterProperties={{ n: ['+', ['get', 'n']] }}>
+            clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-out"
               type="circle"
@@ -391,7 +404,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             />
           </Source>
           <Source id="stores-in" type="geojson" data={storeSources.in} cluster clusterRadius={36} clusterMaxZoom={12}
-            clusterProperties={{ n: ['+', ['get', 'n']] }}>
+            clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-in"
               type="circle"
@@ -440,7 +453,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
         {showBubbles && groupLabels.map((g) => (
           <Marker key={g.id} longitude={g.lon} latitude={g.lat} anchor="center" style={{ pointerEvents: 'none' }}>
             <span className="text-[11px] font-semibold tabular" style={{ color: classOfAvg(g, bubbleBreaks) >= 2 ? '#fff' : '#0a0a0a' }}>
-              {g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}
+              {g.hot > 0 && <span aria-label={`${g.hot} hottest stores`}>🔥</span>}{g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}
             </span>
           </Marker>
         ))}
@@ -452,13 +465,19 @@ export function ClaimsMap(props: ClaimsMapProps) {
               paint={{ 'circle-radius': selectedRadius + 4, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': c.ink, 'circle-stroke-width': 2.5 }} />
           </Source>
         )}
+        {showBubbles && zoom < PIN_ZOOM && hotSingles.map((h) => (
+          <Marker key={`hot-${h.id}`} longitude={h.lon} latitude={h.lat} anchor="center"
+            offset={[bubbleRadii[4] * 0.75, -bubbleRadii[4] * 0.75]} style={{ pointerEvents: 'none', zIndex: 2 }}>
+            <span className="text-[13px] leading-none drop-shadow-[0_0_2px_rgba(255,255,255,0.9)]" aria-label="Hottest store">🔥</span>
+          </Marker>
+        ))}
         {showBubbles && zoom >= PIN_ZOOM && visibleStores.map((r) => {
           const n = claimsByRetailer.get(r.id) ?? 0;
           const cls = classOf(n, bubbleBreaks);
           return (
             <Marker key={r.id} longitude={r.lon} latitude={r.lat} anchor="bottom-left" offset={[-15, 2]}
               style={{ zIndex: selection?.kind === 'store' && selection.id === r.id ? 3 : n > 0 ? 2 : 1, opacity: storesInRadius.has(r.id) ? 1 : 0.45 }}>
-              <StorePin n={n} color={bubbles[mode].ramp[cls]} ink={cls >= 2 ? 'light' : 'dark'} name={r.name}
+              <StorePin n={n} hot={isHot(n)} color={bubbles[mode].ramp[cls]} ink={cls >= 2 ? 'light' : 'dark'} name={r.name}
                 showName={zoom >= NAME_ZOOM && (labelIds.has(r.id) || (selection?.kind === 'store' && selection.id === r.id))} selected={selection?.kind === 'store' && selection.id === r.id}
                 onClick={() => onSelectStore?.(r.id)} />
             </Marker>

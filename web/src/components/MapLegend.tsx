@@ -32,7 +32,7 @@ export interface MapLegendProps {
   /** Number of tracts in view flagged for a low town match rate (claims metrics only). */
   lowMatchCount?: number;
   /** Bubble classes (listed claims per store in the radius); omit when bubbles are off. */
-  bubbles?: { breaks: number[]; min: number; max: number; stores: number };
+  bubbles?: { breaks: number[]; min: number; max: number; stores: number; hotMin?: number | null };
   /** Makes the store key interactive: show/hide by class and list the stores in view. */
   storeControls?: StoreKeyControls;
 }
@@ -151,14 +151,16 @@ function KeyRow({ cls, hidden, count, onToggle, mark, children }: {
  * With controls, each row toggles those stores on the map and shows how many are in view,
  * and a list names the stores currently in view.
  */
-function BubbleKey({ breaks, min, max, stores, controls }: {
-  breaks: number[]; min: number; max: number; stores: number; controls?: StoreKeyControls;
+function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
+  breaks: number[]; min: number; max: number; stores: number; hotMin?: number | null; controls?: StoreKeyControls;
 }) {
   const mode = useMode();
   const t = bubbleTokens[mode];
   const [listOpen, setListOpen] = useState(false);
   const labels = classLabels(breaks, min, max, true, (v) => fmtInt(Math.round(v)), true);
   const top = labels.length - 1;
+  // With a hottest tier, the top class stops just below it: "32 – 79", then "🔥 80+".
+  if (hotMin !== null && top > 0) labels[top] = `${fmtInt(breaks[top - 1] + 1)} – ${fmtInt(hotMin - 1)}`;
   const count = (cls: number) => controls?.inView.filter((s) => s.cls === cls).length;
   const shown = controls ? controls.inView.filter((s) => !controls.hidden.has(s.cls)) : [];
   return (
@@ -180,6 +182,16 @@ function BubbleKey({ breaks, min, max, stores, controls }: {
             {label}{i === top && top === 4 && <span className="font-semibold text-primary"> · Top stores</span>}
           </KeyRow>
         ))}
+        {hotMin !== null && (
+          <KeyRow cls={5} hidden={!!controls?.hidden.has(5)} count={count(5)} onToggle={controls?.onToggle}
+            mark={<span className="relative" style={{ width: bubbleRadii[4] * 2, height: bubbleRadii[4] * 2 }}>
+              <span className="absolute inset-0 rounded-full" style={{ backgroundColor: t.ramp[4], boxShadow: `0 0 0 1px ${t.stroke}` }} />
+              <span className="absolute -top-1.5 -right-1.5 text-[13px] leading-none">🔥</span>
+            </span>}>
+            {fmtInt(hotMin)}+ <span className="font-semibold text-primary">· Hottest</span>
+            <span className="text-xs text-tertiary"> (top 3%)</span>
+          </KeyRow>
+        )}
         <KeyRow cls={-1} hidden={!!controls?.hidden.has(-1)} count={count(-1)} onToggle={controls?.onToggle}
           mark={<span className="size-[5px] rounded-full" style={{ boxShadow: `0 0 0 1px ${t.hollow}` }} />}>
           No listed claims
@@ -212,9 +224,9 @@ function BubbleKey({ breaks, min, max, stores, controls }: {
                   <button type="button" onClick={() => controls.onSelectStore(st.id)}
                     className="flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-primary_hover">
                     <span className="size-2.5 shrink-0 rounded-full"
-                      style={st.cls >= 0 ? { backgroundColor: t.ramp[st.cls] } : { boxShadow: `0 0 0 1px ${t.hollow}` }} aria-hidden />
+                      style={st.cls >= 0 ? { backgroundColor: t.ramp[Math.min(st.cls, 4)] } : { boxShadow: `0 0 0 1px ${t.hollow}` }} aria-hidden />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-primary">{st.name}</span>
+                      <span className="block truncate text-xs font-medium text-primary">{st.cls === 5 && '🔥 '}{st.name}</span>
                       <span className="block truncate text-[11px] text-tertiary">{st.town}</span>
                     </span>
                     <span className="text-xs font-semibold text-primary tabular">{fmtInt(st.n)}</span>
