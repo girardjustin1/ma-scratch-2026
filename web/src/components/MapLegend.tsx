@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown } from '@untitledui/icons';
 import { cx } from '@/utils/cx';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
-import { TREND_DAYS, type StoreTrend } from './SelectionCard';
+import { trendWindowLabel, type StoreTrend, type TrendWindow } from './SelectionCard';
 import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
@@ -123,6 +123,8 @@ export interface StoreKeyControls {
   onToggle: (cls: number) => void;
   onShowAll: () => void;
   onSelectStore: (id: string) => void;
+  /** The halves of the selected range that "Trending" compares. */
+  trendWindow?: TrendWindow;
 }
 
 /** One legend row that doubles as a show/hide toggle, with the count in view. */
@@ -233,7 +235,9 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
               </ButtonGroup>
               {listSort === 'trending' && (
                 <p className="mt-1.5 text-[11px] leading-[1.4] text-tertiary">
-                  8+ listed in the last {TREND_DAYS} days and at least double the {TREND_DAYS} days before.
+                  {controls.trendWindow
+                    ? <>Later half of your date range vs the earlier half ({trendWindowLabel(controls.trendWindow)}): {controls.trendWindow.min}+ listed and at least double.</>
+                    : 'Later half of your date range vs the earlier half.'}
                 </p>
               )}
             </div>

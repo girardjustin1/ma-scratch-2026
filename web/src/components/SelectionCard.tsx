@@ -4,7 +4,7 @@ import { Button } from '@/components/base/buttons/button';
 import { CloseButton } from '@/components/base/buttons/close-button';
 import type { Claim, Coverage, GameRef, Retailer, TractMetrics, TractProps } from '../domain/types';
 import { LABELS } from '../lib/copy';
-import { addDays, fmtDate, fmtInt, fmtShortDate, fmtUsd } from '../lib/format';
+import { addDays, fmtDate, fmtInt, fmtRange, fmtShortDate, fmtUsd } from '../lib/format';
 import { Card, IncomeValue } from './Basics';
 
 export type PanelTab = 'claims' | 'stores' | 'games' | 'place';
@@ -12,9 +12,12 @@ export type PanelTab = 'claims' | 'stores' | 'games' | 'place';
 /** Days counted as "recent", back from the end of the listed-date filter. */
 export const RECENT_DAYS = 30;
 
-/** Trend window: the last TREND_DAYS vs the TREND_DAYS before, to the end of the date filter. */
-export const TREND_DAYS = 90;
+/** Trend comparison over the selected listed-date range: later half vs earlier half. */
+export interface TrendWindow { priorFrom: string; priorTo: string; recentFrom: string; recentTo: string; min: number }
 export interface StoreTrend { recent: number; prior: number; trending: boolean }
+
+export const trendWindowLabel = (w: TrendWindow) =>
+  `${fmtRange(w.recentFrom, w.recentTo)} vs ${fmtRange(w.priorFrom, w.priorTo)}`;
 
 export function recentOf(claims: Claim[], anchor: string) {
   const from = addDays(anchor, -(RECENT_DAYS - 1));
@@ -70,7 +73,9 @@ interface CommonProps {
 }
 
 /** Pinned card for a clicked store: identity, counts, recent claims, and actions. */
-export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClose, trend }: CommonProps & { store: Retailer; trend?: StoreTrend }) {
+export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClose, trend, trendWindow }: CommonProps & {
+  store: Retailer; trend?: StoreTrend; trendWindow?: TrendWindow;
+}) {
   const g = new Map(games.map((x) => [x.id, x]));
   const latest = claims.reduce<string | null>((m, c) => (!m || c.listedDate > m ? c.listedDate : m), null);
   return (
@@ -97,7 +102,10 @@ export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClos
           {trend.trending
             ? <BadgeWithIcon type="modern" size="sm" color="gray" iconLeading={TrendUp01}>Trending</BadgeWithIcon>
             : <TrendUp01 className="size-3.5 text-fg-quaternary" aria-hidden />}
-          {fmtInt(trend.recent)} listed in the last {TREND_DAYS} days vs {fmtInt(trend.prior)} in the {TREND_DAYS} before
+          <span>
+            {fmtInt(trend.recent)} vs {fmtInt(trend.prior)} listed
+            {trendWindow && <span className="block text-[11px] text-tertiary">{trendWindowLabel(trendWindow)}</span>}
+          </span>
         </div>
       )}
       <Recent claims={claims} anchor={anchor} games={g} />

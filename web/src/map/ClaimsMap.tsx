@@ -26,6 +26,12 @@ export interface ClaimsMapProps {
   bubbleBreaks: number[];
   /** Only stores whose listed claims fall in [min, max] are drawn; max >= storeRangeTop means no cap. */
   storeRange?: [number, number];
+  /**
+   * Playback is running: every store is its own bubble (no groups, so nothing pops in and
+   * out), sizes grow continuously with the running count, and stores appear at their first
+   * listed claim.
+   */
+  playing?: boolean;
   /** Listed claims at or above which a store is "hottest" (🔥); null = none. */
   hotMin?: number | null;
   /** Store classes switched off in the legend (0–4 by bubbleBreaks; 5 = hottest; -1 = no listed claims). */
@@ -98,7 +104,7 @@ const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
     tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
-    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds, hotMin = null,
+    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds, hotMin = null, playing = false,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
     height = '100%',
@@ -175,7 +181,13 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const stepBy = (input: unknown, out: readonly (string | number)[]) =>
     ['step', input, out[0], ...bubbleBreaks.flatMap((b, i) => [above(b), out[i + 1]])];
   const storeColor = stepBy(['get', 'n'], bubbles[mode].ramp);
-  const storeRadius = stepBy(['get', 'n'], bubbleRadii);
+  // Playback: radius grows continuously with the running count (area ~ count), reaching the
+  // largest class size at the full range's hottest threshold, so stores keep compounding.
+  const growCap = Math.max(2, hotMin ?? (bubbleBreaks[bubbleBreaks.length - 1] ?? 10) * 2);
+  const storeRadius = playing
+    ? ['interpolate', ['linear'], ['sqrt', ['min', ['get', 'n'], growCap * 2]],
+        1, bubbleRadii[0], Math.sqrt(growCap), bubbleRadii[4], Math.sqrt(growCap * 2), bubbleRadii[4] * 1.35]
+    : stepBy(['get', 'n'], bubbleRadii);
   // Groups: color by average listed claims per store, size by the total.
   const groupColor = stepBy(['/', ['get', 'n'], ['get', 'point_count']], bubbles[mode].ramp);
   const groupRadius = ['interpolate', ['linear'], ['sqrt', ['get', 'n']], 0, 12, 20, 18, 60, 28, 120, 36];
@@ -358,10 +370,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
         </Source>
         {showBubbles && (
           <>
-          <Source id="stores-out" type="geojson" data={storeSources.out} cluster clusterRadius={36} clusterMaxZoom={12}
+          <Source key={`out-${playing}`} id="stores-out" type="geojson" data={storeSources.out} cluster={!playing} clusterRadius={36} clusterMaxZoom={12}
             clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-out"
+              layout={{ visibility: playing ? 'none' : 'visible' }}
               type="circle"
               maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
@@ -403,10 +416,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
               }}
             />
           </Source>
-          <Source id="stores-in" type="geojson" data={storeSources.in} cluster clusterRadius={36} clusterMaxZoom={12}
+          <Source key={`in-${playing}`} id="stores-in" type="geojson" data={storeSources.in} cluster={!playing} clusterRadius={36} clusterMaxZoom={12}
             clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-in"
+              layout={{ visibility: playing ? 'none' : 'visible' }}
               type="circle"
               maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
@@ -450,7 +464,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </Source>
           </>
         )}
-        {showBubbles && groupLabels.map((g) => (
+        {showBubbles && !playing && groupLabels.map((g) => (
           <Marker key={g.id} longitude={g.lon} latitude={g.lat} anchor="center" style={{ pointerEvents: 'none' }}>
             <span className="text-[11px] font-semibold tabular" style={{ color: classOfAvg(g, bubbleBreaks) >= 2 ? '#fff' : '#0a0a0a' }}>
               {g.hot > 0 && <span aria-label={`${g.hot} hottest stores`}>🔥</span>}{g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}

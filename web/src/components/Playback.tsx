@@ -12,14 +12,14 @@ export type PlayMode = 'grow' | 'window';
 
 /** Days in the moving window of the "Last 30 days" mode. */
 export const WINDOW_DAYS = 30;
-const STEP_DAYS = 7;
-const SPEEDS = { '1': 900, '2': 450, '4': 200 } as const;
+/** One frame per listed day; a tick every TICK_MS advances SPEEDS[speed] days. */
+const TICK_MS = 100;
+const SPEEDS = { '1': 1, '2': 3, '4': 7 } as const;
 
-/** Weekly frames across [from, to]; the last frame is always `to`. */
+/** Daily frames across [from, to]. */
 export function frames(from: string, to: string) {
   const out: string[] = [];
-  for (let d = addDays(from, STEP_DAYS - 1); d < to; d = addDays(d, STEP_DAYS)) out.push(d);
-  out.push(to);
+  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
   return out;
 }
 
@@ -46,10 +46,10 @@ export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackPr
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(() => {
-      const next = idx + 1;
-      if (next >= list.length) { setPlaying(false); return; }
+      const next = Math.min(list.length - 1, idx + SPEEDS[speed]);
       onChange(list[next]);
-    }, SPEEDS[speed]);
+      if (next >= list.length - 1) setPlaying(false);
+    }, TICK_MS);
     return () => clearInterval(t);
   }, [playing, idx, list, speed, onChange]);
 
@@ -68,15 +68,15 @@ export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackPr
   return (
     <Card className="w-[400px] p-3">
       <div className="flex items-center gap-1">
-        <ButtonUtility size="xs" color="tertiary" icon={SkipBack} tooltip="Back a week" onClick={() => { setPlaying(false); go(idx - 1); }} />
+        <ButtonUtility size="xs" color="tertiary" icon={SkipBack} tooltip="Back a week" onClick={() => { setPlaying(false); go(idx - 7); }} />
         <ButtonUtility size="sm" color="secondary" icon={playing ? PauseCircle : PlayCircle} tooltip={playing ? 'Pause' : 'Play'}
           onClick={() => { if (!playing && idx >= list.length - 1) go(0); setPlaying(!playing); }} />
-        <ButtonUtility size="xs" color="tertiary" icon={SkipForward} tooltip="Forward a week" onClick={() => { setPlaying(false); go(idx + 1); }} />
+        <ButtonUtility size="xs" color="tertiary" icon={SkipForward} tooltip="Forward a week" onClick={() => { setPlaying(false); go(idx + 7); }} />
         <div className="ml-2 min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-primary tabular">
             {mode === 'grow' ? `Through ${fmtDate(value)}` : `${fmtDate(windowFrom < from ? from : windowFrom)} – ${fmtDate(value)}`}
           </p>
-          <p className="text-xs text-tertiary tabular">Week {idx + 1} of {list.length} · listed dates</p>
+          <p className="text-xs text-tertiary tabular">Day {idx + 1} of {list.length} · listed dates</p>
         </div>
         <CloseButton size="sm" slot={null} onPress={() => { setPlaying(false); onChange(null); }} />
       </div>
@@ -96,7 +96,8 @@ export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackPr
         </ButtonGroup>
       </div>
       <p className="mt-2 text-xs leading-[1.45] text-tertiary">
-        Colors and sizes keep the full range’s scale, so bubbles grow as listed claims add up. Close to return to the full range.
+        Each store is its own bubble while playing. It appears at its first listed claim and grows with its running
+        total; colors follow the legend’s classes. Tract colors stay on the full range. Close to return.
       </p>
     </Card>
   );
