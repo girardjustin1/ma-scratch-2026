@@ -23,6 +23,7 @@ OUT = ROOT / "web/public/local/view.json"
 TRACT_RADIUS_MI = 12  # draw a ring of no-data tracts beyond the 10 mi coverage edge
 COVERAGE_MI = 10  # the retailer sweep is proven complete to this radius
 RELEASE = "2020-2024"
+LOW_MATCH_MIN_CLAIMS = 50  # towns with fewer listed claims get no match-rate flag
 
 
 def load_pin() -> tuple[float, float]:
@@ -103,6 +104,25 @@ def main():
     games = [{"id": g, "name": names[g], "price": prices.get(g)} for g in game_ids]
     gidx = {g: i for i, g in enumerate(game_ids)}
 
+    # Per-municipality match rates: what share of the town's listed scratch claims matched a
+    # retailer, and what share could be placed in a Census-verified tract.
+    town_match = {}
+    if statewide:
+        for town, total, matched, placed in con.execute(f"""
+            WITH all_claims AS (
+              SELECT m.municipality, count(*) AS total
+              FROM read_parquet('{P / 'claims_scratch.parquet'}') c
+              JOIN read_csv_auto('{P / 'location_municipality_map.csv'}') m ON c.retailer_location = m.location
+              WHERE m.municipality IS NOT NULL AND m.municipality <> 'AMBIGUOUS'
+              GROUP BY 1),
+            matched AS (
+              SELECT municipality, count(*) AS matched, count(tract_geoid) AS placed
+              FROM read_parquet('{claims_file}') GROUP BY 1)
+            SELECT a.municipality, a.total, coalesce(m.matched, 0), coalesce(m.placed, 0)
+            FROM all_claims a LEFT JOIN matched m USING (municipality)
+            WHERE a.total >= {LOW_MATCH_MIN_CLAIMS}""").fetchall():
+            town_match[town] = {"total": total, "matched": matched, "placed": placed}
+
     out = {
         "note": "LOCAL ONLY. Mass Lottery data: personal, non-commercial use; do not redistribute.",
         "coverage": {"label": "statewide" if statewide else f"{COVERAGE_MI} mi around your pin", "center": list(pin),
@@ -112,6 +132,7 @@ def main():
         "income": income,
         "retailers": retailers,
         "games": games,
+        "townMatch": town_match,
         # Compact claims: [listedDate, gameIndex, prizeAmount, retailerId]
         "claims": [[d, gidx[g], amt, rid] for d, g, _, amt, rid in rows],
     }

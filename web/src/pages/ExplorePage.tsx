@@ -5,7 +5,7 @@ import type { ViewState } from '@vis.gl/react-maplibre';
 import { countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
-  Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TractCollection, TractIncome,
+  Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome,
 } from '../domain/types';
 import { ClaimsMap } from '../map/ClaimsMap';
 import type { Basemap } from '../map/mapStyle';
@@ -23,6 +23,8 @@ export interface ExploreData {
   claims: Claim[];
   games: GameRef[];
   coverage: Coverage;
+  /** Per-town matching outcome; only present for real data. */
+  townMatch?: Record<string, TownMatch>;
 }
 
 export interface ExplorePageProps {
@@ -51,6 +53,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
       tractCount: shown.length,
       claimsInRadius: shown.reduce((sum, m) => sum + (m.claims ?? 0), 0),
       noDataCount: shown.length - values.length,
+      lowMatchCount: shown.filter((m) => m.lowMatch).length,
     };
   }, [data, filters, metric]);
 }
@@ -109,14 +112,13 @@ export function ExplorePage({
         <Box sx={{ position: 'relative', minHeight: 0 }}>
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
             viewState={view} onMove={setView} />
-          <Box sx={{ position: 'absolute', left: 12, bottom: 28 }}>
-            <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} coverage={data.coverage} />
-          </Box>
-          {!compare && (
-            <Box sx={{ position: 'absolute', left: 12, top: 12 }}>
-              <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />
+          {/* Left column: layers then legend, scrolling instead of overlapping on short windows. */}
+          <Box sx={{ position: 'absolute', left: 12, top: 12, bottom: 28, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto', pointerEvents: 'none', '& > *': { pointerEvents: 'auto', flexShrink: 0 } }}>
+            {!compare && <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />}
+            <Box sx={{ mt: 'auto' }}>
+              <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage} />
             </Box>
-          )}
+          </Box>
           <Typography variant="caption" sx={{ position: 'absolute', right: 52, top: 14, bgcolor: 'background.paper', px: 1, borderRadius: 1, opacity: 0.9 }}>
             Double-click to move the pin · click a tract for its listed claims
           </Typography>
@@ -125,11 +127,11 @@ export function ExplorePage({
           <Box sx={{ position: 'relative', minHeight: 0 }}>
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
               viewState={view} onMove={setView} />
-            <Box sx={{ position: 'absolute', left: 12, top: 12 }}>
-              <Paper sx={{ p: 0.5 }}><MetricSwitcher value={metricB} onChange={setMetricB} /></Paper>
-            </Box>
-            <Box sx={{ position: 'absolute', left: 12, bottom: 28 }}>
-              <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} coverage={data.coverage} />
+            <Box sx={{ position: 'absolute', left: 12, top: 12, bottom: 28, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto', pointerEvents: 'none', '& > *': { pointerEvents: 'auto', flexShrink: 0 } }}>
+              <Paper sx={{ p: 0.5, alignSelf: 'flex-start' }}><MetricSwitcher value={metricB} onChange={setMetricB} /></Paper>
+              <Box sx={{ mt: 'auto' }}>
+                <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage} />
+              </Box>
             </Box>
           </Box>
         )}

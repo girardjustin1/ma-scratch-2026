@@ -1,7 +1,8 @@
 import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
 import type { Coverage, TractMetrics, TractProps } from '../domain/types';
 import { LABELS } from '../lib/copy';
-import { fmtInt, fmtShortDate } from '../lib/format';
+import { fmtInt, fmtPct, fmtShortDate } from '../lib/format';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { IncomeValue } from './Basics';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -41,6 +42,14 @@ export function TractTooltip({ tract, metrics, coverage }: { tract: TractProps; 
           <IncomeValue value={metrics.income} moe={metrics.incomeMoe} flag={metrics.incomeFlag} compact />
         </Row>
       </Stack>
+      {metrics.lowMatch && metrics.townMatchRate !== null && (
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'flex-start', mt: 1, color: 'warning.dark' }}>
+          <WarningAmberIcon sx={{ fontSize: 15, mt: '1px', color: 'warning.main' }} />
+          <Typography variant="caption" sx={{ color: 'text.primary' }}>
+            Low match rate: only {fmtPct(metrics.townMatchRate)} of {tract.town}’s listed claims matched a store, so this count is low.
+          </Typography>
+        </Stack>
+      )}
       <Divider sx={{ my: 1 }} />
       <Typography variant="caption">
         {metrics.covered ? `Inside claims coverage (${coverage.label})` : 'Outside claims coverage: no claims data'}

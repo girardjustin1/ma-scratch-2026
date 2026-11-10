@@ -9,7 +9,7 @@ import PlaceIcon from '@mui/icons-material/Place';
 import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
-import { bubbles, chrome, ramps, type Mode } from '../theme/tokens';
+import { bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
 import { TractTooltip } from '../components/TractTooltip';
 
@@ -59,6 +59,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             ...f.properties,
             cls: v === null ? -1 : classOf(v, breaks),
             inRadius: m?.inRadius ? 1 : 0,
+            lowMatch: m?.lowMatch && metric !== 'income' ? 1 : 0,
           },
         };
       }),
@@ -152,6 +153,12 @@ export function ClaimsMap(props: ClaimsMapProps) {
             paint={{ 'fill-pattern': 'hatch', 'fill-opacity': Math.min(1, tractOpacity + 0.1) }}
           />
           <Layer id="tract-line" type="line" paint={{ 'line-color': c.surface, 'line-width': 0.6, 'line-opacity': 0.9 }} />
+          <Layer
+            id="tract-lowmatch"
+            type="line"
+            filter={['==', ['get', 'lowMatch'], 1]}
+            paint={{ 'line-color': status.warning, 'line-width': 1.6, 'line-dasharray': [1.5, 1.5] }}
+          />
         </Source>
         {!coverage.statewide && (
           <Source id="coverage" type="geojson" data={coverageRing}>

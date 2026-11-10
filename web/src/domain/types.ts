@@ -113,8 +113,19 @@ export interface TractMetrics {
   income: number | null;
   incomeMoe: number | null;
   incomeFlag: IncomeFlag;
+  /** Share of the tract's town's listed claims matched to a retailer; null if not measured. */
+  townMatchRate: number | null;
+  /** True when townMatchRate is below LOW_MATCH_RATE: tract counts understate claims. */
+  lowMatch: boolean;
   firstListed: IsoDate | null;
   lastListed: IsoDate | null;
+}
+
+/** Per-municipality matching outcome, from scripts/build_local_view.py. */
+export interface TownMatch {
+  total: number;
+  matched: number;
+  placed: number;
 }
 
 export interface StatResult {

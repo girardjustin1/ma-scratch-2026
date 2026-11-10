@@ -63,16 +63,20 @@ export const TooltipUncertain: Story = {
   name: 'Tract tooltip · uncertain income',
   render: () => <TractTooltip tract={props(highMoe.geoid)} metrics={highMoe} coverage={S.coverage} />,
 };
+export const TooltipLowMatch: Story = {
+  name: 'Tract tooltip · low town match rate',
+  render: () => <TractTooltip tract={props(coveredBusy.geoid)} metrics={{ ...coveredBusy, lowMatch: true, townMatchRate: 0.64 }} coverage={S.coverage} />,
+};
 export const TooltipNoRetailers: Story = {
   name: 'Tract tooltip · no retailers',
   render: () => <TractTooltip tract={props(noRetailers.geoid)} metrics={noRetailers} coverage={S.coverage} />,
 };
 
-export const Legend: StoryObj<{ metric: MetricKey }> = {
-  args: { metric: 'claims' },
+export const Legend: StoryObj<{ metric: MetricKey; lowMatchCount: number }> = {
+  args: { metric: 'claims', lowMatchCount: 0 },
   argTypes: { metric: { control: 'inline-radio', options: ['claims', 'income', 'perRetailer'] } },
-  render: ({ metric }) => (
-    <MapLegend metric={metric} breaks={metric === 'income' ? [62000, 81000, 99000, 124000] : metric === 'claims' ? [1, 2, 4, 7] : [0.5, 1, 2, 3.5]}
+  render: ({ metric, lowMatchCount }) => (
+    <MapLegend lowMatchCount={lowMatchCount} metric={metric} breaks={metric === 'income' ? [62000, 81000, 99000, 124000] : metric === 'claims' ? [1, 2, 4, 7] : [0.5, 1, 2, 3.5]}
       min={metric === 'income' ? 31000 : 0} max={metric === 'income' ? 210000 : 19} tractCount={104} noDataCount={12} coverage={S.coverage} />
   ),
 };

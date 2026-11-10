@@ -1,6 +1,6 @@
 import { distance, point } from '@turf/turf';
 import type {
-  Claim, Coverage, Filters, GameRef, PrizeBand, Retailer, TractCollection, TractIncome, TractMetrics,
+  Claim, Coverage, Filters, GameRef, PrizeBand, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
 } from './types';
 
 const BANDS: Record<PrizeBand, [number, number]> = {
@@ -15,6 +15,12 @@ export function inPrizeBand(amount: number, band: PrizeBand) {
   const [lo, hi] = BANDS[band];
   return amount >= lo && amount <= hi;
 }
+
+/** Towns below this share of claims matched to a retailer get a low-match flag on the map. */
+export const LOW_MATCH_RATE = 0.8;
+
+/** Tract town names carry a " Town" suffix for some municipalities ("Agawam Town"). */
+export const municipalityOf = (town: string) => town.replace(/ Town$/, '');
 
 const miles = (a: [number, number], b: [number, number]) =>
   distance(point(a), point(b), { units: 'miles' });
@@ -49,8 +55,9 @@ export function computeTractMetrics(args: {
   claims: Claim[];
   coverage: Coverage;
   filters: Filters;
+  townMatch?: Record<string, TownMatch>;
 }): TractMetrics[] {
-  const { tracts, income, retailers, claims, coverage, filters } = args;
+  const { tracts, income, retailers, claims, coverage, filters, townMatch } = args;
   const incomeBy = new Map(income.map((r) => [r.geoid, r]));
   const retailerTract = new Map(retailers.map((r) => [r.id, r.tractGeoid]));
   const retailersPer = new Map<string, number>();
@@ -76,6 +83,8 @@ export function computeTractMetrics(args: {
     const inc = incomeBy.get(p.geoid);
     const nRet = retailersPer.get(p.geoid) ?? 0;
     const agg = claimsBy.get(p.geoid);
+    const tm = townMatch?.[municipalityOf(p.town)];
+    const rate = tm && tm.total > 0 ? tm.matched / tm.total : null;
     const nClaims = covered ? (agg?.n ?? 0) : null;
     return {
       geoid: p.geoid,
@@ -89,6 +98,8 @@ export function computeTractMetrics(args: {
       incomeFlag: inc?.flag ?? 'suppressed',
       firstListed: covered ? (agg?.first ?? null) : null,
       lastListed: covered ? (agg?.last ?? null) : null,
+      townMatchRate: rate,
+      lowMatch: covered && rate !== null && rate < LOW_MATCH_RATE,
     };
   });
 }

@@ -3,7 +3,8 @@ import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtCompactUsd, fmtInt, fmtRange } from '../lib/format';
-import { noData, ramps, type Mode } from '../theme/tokens';
+import { noData, ramps, status, type Mode } from '../theme/tokens';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 const TITLES: Record<MetricKey, string> = {
   claims: LABELS.listedClaims,
@@ -25,9 +26,11 @@ export interface MapLegendProps {
   tractCount: number;
   noDataCount: number;
   coverage: Coverage;
+  /** Number of tracts in view flagged for a low town match rate (claims metrics only). */
+  lowMatchCount?: number;
 }
 
-export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage }: MapLegendProps) {
+export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0 }: MapLegendProps) {
   const mode = useTheme().palette.mode as Mode;
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
   const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v));
@@ -70,6 +73,13 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
             {coverage.statewide ? 'Coverage: statewide' : 'Coverage boundary'} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
           </Typography>
         </Stack>
+        {metric !== 'income' && lowMatchCount > 0 && (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
+            <Box sx={{ width: 22, height: 12, border: `2px dashed ${status.warning}`, borderRadius: 0.5 }} />
+            <WarningAmberIcon sx={{ fontSize: 14, color: 'warning.main' }} />
+            <Typography variant="caption">Low match rate (under 80%) · {fmtInt(lowMatchCount)}</Typography>
+          </Stack>
+        )}
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Box sx={{ width: 22, borderTop: '2px dashed', borderColor: 'text.secondary' }} />
           <Typography variant="caption">Search radius</Typography>
