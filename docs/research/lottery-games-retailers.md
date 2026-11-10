@@ -203,9 +203,106 @@ Petersham/North Quabbin.
   because density ranges from about 1 mi to about 15 mi per 100 retailers. Rough estimate: 300–800
   calls at 1 call per 2 s, about 10–30 minutes. Stop subdividing a cell once its 100th-nearest
   distance exceeds the cell's half-diagonal. Dedupe on `retailerId`. The owner should approve
-  this before it runs. It was not done in this sample pass.
+  this before it runs. A 10 mi area around the owner's pin took only 42 calls (see Pin-area sweep),
+  so a statewide sweep may need fewer calls than estimated here.
 - **No history:** the locator shows current agents only. Maintain `first_seen` / `last_seen` from
   repeated sweeps (the PRD's `retailers` table already has them).
+
+## Pin-area sweep (2026-11-10 UTC)
+
+Scope: licensed retailers around the owner's pin, not statewide. The pin is stored only in
+`data/private/pin.json` (gitignored). This doc and the code never contain it.
+
+**Method.**
+1. Adaptive nearest-100 sweep with B1. A call's 100th-nearest `distance` is its covered radius `r`.
+   The API's `distance` is the haversine distance on a 3,959 mi Earth radius from the query point
+   to the Lottery's own coordinates (checked to within 1e-8 mi). Results are sorted, and every call
+   returned exactly 100.
+2. Coverage proof: check points on a 0.1 mi grid over the target disk. A point counts as covered
+   when it lies within `r − 0.081 mi` of some query, where 0.081 mi = half the cell diagonal plus a
+   0.01 mi tolerance. That means every location inside the disk is within `r` of a query.
+3. Next query point: take the uncovered check point nearest the pin. Among candidates up to 0.6 ×
+   the local radius away, pick the one that covers the most uncovered points.
+4. Checked independently with 400,000 random points: none uncovered at 5 mi or 10 mi (minimum
+   margin 0.095 mi at 10 mi). At 10.5 mi, 167 were uncovered, so **10 mi is the proven-complete
+   radius**.
+5. Every request used ≥1.3 s spacing and the project User-Agent, with a hard cap of 250 calls.
+
+**Calls:** 18 to cover 5 mi. That was under 80, so the sweep extended to 10 mi, for **42 calls
+total**, all HTTP 200. Covered radius per call ranged from 1.08 to 6.55 mi (median 2.18).
+Raw responses and `manifest.csv` (query point, fetched_at, status, n, max distance, sha256) are in
+`data/raw/lottery_retailers/sweep/`. The summary is in `sweep_result.json`.
+
+**Retailers:** 1,806 unique `retailerId`s seen. **1,483 lie within 10 mi** of the pin, 626 within
+5 mi. Output: `data/processed/retailers_pin_area.csv`, one row per retailer. Columns: `retailer_id`,
+`locator_id`, name, address, town, zip, Lottery lat/lon, `distance_mi`, `within_complete_radius`,
+Keno/Wheel of Luck flags, `first_seen`, `tract_geoid`, `census_lat`, `census_lon`,
+`geocode_quality`, `coord_disagreement_mi`, `coord_flag`. Run metadata is in
+`retailers_pin_area_meta.json`.
+
+**Census re-geocode:** one batch to `geocoding.geo.census.gov/geocoder/geographies/addressbatch`
+(benchmark `Public_AR_Current`, vintage `Current_Current`) with all 1,806 street addresses. It
+returned HTTP 200 in 24 s. The raw request and response are in `data/raw/census_geocoder/`.
+For the 1,483 retailers inside 10 mi:
+
+| | Count |
+| --- | --- |
+| Exact match | 1,278 |
+| Non-exact match | 140 |
+| Tie (no point) | 4 |
+| No match | 61 |
+| Lottery vs Census point > 0.25 mi | 63 (42 of them > 1 mi) |
+| **Flagged** (> 0.25 mi, tie or no match) | **128 (8.6%)** |
+| Median / 90th-percentile disagreement | 0.015 mi / 0.084 mi |
+| Distinct tracts (Census point) | 412 |
+
+Most points agree closely. The large disagreements are the bad Lottery points described in Risks,
+e.g. stores in Chicopee, New Bedford and Framingham whose Lottery point sits near Boston. Use the
+Census point and tract when matched. For flagged rows, keep both coordinate sets and show the store
+as low-confidence location.
+
+**Completeness caveat:** the sweep is complete with respect to the *Lottery's* coordinates. A
+retailer that really sits inside 10 mi but carries a bad Lottery point far away would be missed. A
+retailer that sits far away but has a bad point inside would be included. That second kind is why
+the town scope below uses Census-verified points.
+
+**Winners matching** (`data/processed/claims_scratch.parquet`, in progress at run time: 5,717
+listed scratch claims, listed dates 2023-11-09..2023-11-27 only). The claims' `(retailer,
+retailer_location)` strings were matched to the 1,483 retailers inside 10 mi:
+- **Normalization:** upper-case; `&`→AND; apostrophes dropped; punctuation folded to spaces;
+  INC/LLC/CORP/CO/LTD/THE and `#123` removed.
+- **Tiers, in order:**
+  1. Exact normalized name + town, unique.
+  2. Same brand + store number (`#446`, `32441-A`) + town, unique.
+  3. Name with store numbers removed + town, unique.
+  4. Anything else is not merged. Ties go to `unresolved_retailer_matches.csv` as `ambiguous`,
+     with all candidates. Where both sides carry different store numbers, the row goes there as
+     `no_match_store_number_differs`. Rows with only fuzzy look-alikes go there as
+     `no_match_fuzzy_candidates`, with up to 3 candidates. The rest go there as `no_candidate`.
+- **Town scope** (postal town strings):
+  - *Core* towns have a Census-verified retailer inside 10 mi and none outside it (31 towns: e.g.
+    Everett, Chelsea, Malden, Medford, Somerville, Revere, Cambridge, E Boston, Charlestown, Lynn).
+  - *Partial* towns straddle the 10 mi line, so some of their stores were never swept (16 towns:
+    e.g. Boston, Dorchester, Quincy, Newton, Waltham, Salem).
+
+| Scope | Claims matched | Distinct (retailer, town) pairs matched |
+| --- | --- | --- |
+| Core towns | **759 / 878 (86.4%)** | 390 / 452 (86.3%) |
+| Partial towns | 305 / 607 (50.2%) | 174 / 328 (53.0%) |
+
+The 1,064 matched claims break down by tier: exact 1,038, store number 24, name without number 2.
+Of the 216 unresolved pairs: 160 `no_candidate`, 32 fuzzy-only, 15 ambiguous (e.g. three
+"Richdale" stores in Lynn, three Hudson News at Logan) and 9 store-number mismatches.
+
+**Why core towns still miss 14%:** the claims are from November 2023, and the locator lists only
+agents active today. Stores that closed or were renamed since then cannot match a current list. Re-run the matching once
+the backfill is complete. A historical agent list (public-records request) is the only fix for closed
+stores. One judgment call to review: 7-Eleven franchise letters differ in some store-number matches
+(`32466-B` vs `32466C`). They are matched on the shared store number and labelled
+`brand_store_number_town`.
+
+Outputs: `data/processed/retailer_matches_pin_area.csv` (matched pairs with method and tract) and
+`data/processed/unresolved_retailer_matches.csv`.
 
 ## Join strategy to the winners list
 
