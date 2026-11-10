@@ -48,6 +48,13 @@ export interface Game {
   originalTopPrize: number;
 }
 
+/** What the map needs about a game. Price is null when the catalog has no row for it. */
+export interface GameRef {
+  id: string;
+  name: string;
+  price: number | null;
+}
+
 export interface PrizeTier {
   gameId: string;
   value: number;

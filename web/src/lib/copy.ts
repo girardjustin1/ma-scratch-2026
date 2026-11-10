@@ -24,6 +24,11 @@ export const CAVEATS = {
   radiusRule: 'A tract is included when its center point falls inside the circle.',
   evBanner: 'Statewide averages. This says nothing about which tickets any store holds.',
   association: 'Results describe association, not cause.',
+  matchedOnly:
+    'Counts are a floor: claims at stores that could not be matched by name and town, or whose location could not be verified, are left out.',
 } as const;
+
+export const LOCAL_NOTICE =
+  'Map: real Lottery-listed claims around your pin, kept on this computer only. Open games, EV, Statistics and Model still show sample data.';
 
 export const SAMPLE_NOTICE = 'Design preview: tract shapes and income are real Census data. Claims, games, retailers and estimates are sample data, not real Lottery activity.';

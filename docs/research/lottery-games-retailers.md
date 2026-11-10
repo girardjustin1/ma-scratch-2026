@@ -266,43 +266,93 @@ retailer that really sits inside 10 mi but carries a bad Lottery point far away 
 retailer that sits far away but has a bad point inside would be included. That second kind is why
 the town scope below uses Census-verified points.
 
-**Winners matching** (`data/processed/claims_scratch.parquet`, in progress at run time: 5,717
-listed scratch claims, listed dates 2023-11-09..2023-11-27 only). The claims' `(retailer,
-retailer_location)` strings were matched to the 1,483 retailers inside 10 mi:
+**Winners matching: full backfill** (rerun 2026-11-10 on `data/processed/claims_scratch.parquet`:
+371,879 listed scratch claims, listed dates 2023-11-09..2026-11-08). The same rules apply, and
+ambiguous matches are never merged.
 - **Normalization:** upper-case; `&`→AND; apostrophes dropped; punctuation folded to spaces;
   INC/LLC/CORP/CO/LTD/THE and `#123` removed.
-- **Tiers, in order:**
-  1. Exact normalized name + town, unique.
-  2. Same brand + store number (`#446`, `32441-A`) + town, unique.
-  3. Name with store numbers removed + town, unique.
-  4. Anything else is not merged. Ties go to `unresolved_retailer_matches.csv` as `ambiguous`,
-     with all candidates. Where both sides carry different store numbers, the row goes there as
-     `no_match_store_number_differs`. Rows with only fuzzy look-alikes go there as
-     `no_match_fuzzy_candidates`, with up to 3 candidates. The rest go there as `no_candidate`.
-- **Town scope** (postal town strings):
-  - *Core* towns have a Census-verified retailer inside 10 mi and none outside it (31 towns: e.g.
-    Everett, Chelsea, Malden, Medford, Somerville, Revere, Cambridge, E Boston, Charlestown, Lynn).
-  - *Partial* towns straddle the 10 mi line, so some of their stores were never swept (16 towns:
-    e.g. Boston, Dorchester, Quincy, Newton, Waltham, Salem).
+- **Tiers, in order** (with `match_confidence`):
+  1. Exact normalized name + postal town, unique (high).
+  2. Same brand + store number (`#446`, `32441-A`) + town, unique (medium).
+  3. Name with store numbers removed + town, unique (medium).
+  4. Name + municipality, unique (low). Only used when the retailer's own postal town does not roll up cleanly (e.g. Chestnut Hill). It fired for 79 claims (Putterham Market, Brookline). A generic-name hit across Boston neighbourhoods ("Mobil", Roxbury vs. E Boston) is rejected as `no_match_other_neighbourhood`.
+  5. Anything else goes to `unresolved_retailer_matches.csv` with its candidates. Categories:
+     `ambiguous` (all tied candidates listed), `no_match_store_number_differs`,
+     `no_match_fuzzy_candidates` (up to 3 look-alikes), `no_match_other_neighbourhood` and `no_candidate`.
+- **Candidates:** all 1,806 swept retailers. Only matches to a retailer within 10 mi of the pin are
+  kept in the outputs. Distance uses the Census point when the Census matched the address,
+  otherwise the Lottery point.
 
-| Scope | Claims matched | Distinct (retailer, town) pairs matched |
+**Municipality roll-up.** Postal and neighbourhood location strings are rolled up to their
+municipality before the area is decided. The map for every location value in the claims and the
+locator (with method and claim count) is `data/processed/location_municipality_map.csv`.
+`retailers_pin_area.csv` gains `municipality` (Census point in the municipal polygon of
+`towns_ma.geojson`; the Lottery point if there was no Census match), `municipality_source` and
+`best_dist`. The rule-based map and the polygon test agree for 1,642 of 1,645 verified retailers.
+Non-identity mappings used inside the area:
+
+| Location value (claims) | Municipality | Method |
 | --- | --- | --- |
-| Core towns | **759 / 878 (86.4%)** | 390 / 452 (86.3%) |
-| Partial towns | 305 / 607 (50.2%) | 174 / 328 (53.0%) |
+| Allston, Brighton, Charlestown, Dorchester, E Boston, Hyde Park, Jamaica Plain, Mattapan, Roslindale, Roxbury, S Boston, W Roxbury (also their upper-case locator forms; Dorchester Center, East/South Boston, West Roxbury, Readville, Roxbury Crossing, Mission Hill, Back Bay and N Dorchester are on the list too) | Boston | Boston neighbourhood list |
+| N Quincy | Quincy | retailer evidence 9/9 |
+| W Newton | Newton | retailer evidence 4/4 |
+| Auburndale | Newton | retailer evidence 3/3 |
+| N Reading | North Reading | direction expanded (outside the area) |
+| Chestnut Hill | **AMBIGUOUS** (Newton 2, Brookline 1) | not rolled up, excluded |
 
-The 1,064 matched claims break down by tier: exact 1,038, store number 24, name without number 2.
-Of the 216 unresolved pairs: 160 `no_candidate`, 32 fuzzy-only, 15 ambiguous (e.g. three
-"Richdale" stores in Lynn, three Hudson News at Logan) and 9 store-number mismatches.
+Elsewhere in the state, 51 location values (11,744 claims, e.g. Hyannis, Buzzards Bay, Whitinsville)
+stay unmapped. They are all outside the area and are listed in the CSV.
 
-**Why core towns still miss 14%:** the claims are from November 2023, and the locator lists only
-agents active today. Stores that closed or were renamed since then cannot match a current list. Re-run the matching once
-the backfill is complete. A historical agent list (public-records request) is the only fix for closed
-stores. One judgment call to review: 7-Eleven franchise letters differ in some store-number matches
-(`32466-B` vs `32466C`). They are matched on the shared store number and labelled
-`brand_store_number_town`.
+**Area by radius.** A municipality is *core* when its whole polygon lies within the radius. It is
+*partial* when only part does; some of its stores were never swept, so it is excluded from rates.
+- 5 mi core: Chelsea, Everett, Malden, Melrose, Revere, Somerville.
+  Partial: Arlington, Boston, Cambridge, Lynn, Medford, Saugus, Stoneham, Wakefield, Winchester,
+  Winthrop.
+- 10 mi core (20): Arlington, Belmont, Cambridge, Chelsea, Everett, Lynn, Malden, Medford, Melrose,
+  Nahant, Revere, Saugus, Somerville, Stoneham, Swampscott, Wakefield, Watertown, Winchester,
+  Winthrop, Woburn.
+  Partial (13): **Boston**, Brookline, Burlington, Lexington, Lynnfield, Marblehead, Newton, Peabody,
+  Quincy, Reading, Salem, Waltham, Wilmington.
+- Boston reaches beyond 10 mi (Hyde Park, West Roxbury), so after roll-up it is partial at both
+  radii. Its claims still match and appear in the parquet, but they are not in the rate
+  denominators.
 
-Outputs: `data/processed/retailer_matches_pin_area.csv` (matched pairs with method and tract) and
-`data/processed/unresolved_retailer_matches.csv`.
+**Match rate for claims whose municipality is core** (claims with a retailer name):
+
+| Year | 5 mi | 10 mi |
+| --- | --- | --- |
+| 2023 (Nov 9–Dec 31) | 749 / 848 (88.3%) | 1,718 / 1,959 (87.7%) |
+| 2024 | 5,697 / 6,254 (91.1%) | 13,402 / 15,097 (88.8%) |
+| 2025 | 5,379 / 5,651 (95.2%) | 12,653 / 13,718 (92.2%) |
+| 2026 (to Nov 8) | 4,267 / 4,368 (97.7%) | 10,016 / 10,632 (94.2%) |
+| **All** | **16,092 / 17,121 (94.0%)** | **37,789 / 41,406 (91.3%)** |
+
+| Other figures | 5 mi | 10 mi |
+| --- | --- | --- |
+| Unresolved (pairs / claims) | 48 / 1,029 | 104 / 3,617 |
+| …of which ambiguous (claims) | 168 | 1,681 |
+| Matched claims whose retailer geocode is flagged (tract withheld, dropped from tract analysis) | 1,393 (8.7% of matched) | 3,582 (9.5% of matched) |
+| Core-municipality claims with no retailer name | 78 | 79 |
+
+The match rate falls with age because the locator lists only agents active today, so stores that
+closed or were renamed since 2023 can't match. The largest unresolved items are genuinely
+ambiguous: several same-name stores in one town, such as "Richdale" (3 in Lynn), "One Stop Mart"
+(Lynn), "Stop N Save" (Stoneham), "The Corner Store" (Everett) and "A L Prime Energy" (Lynn,
+Woburn). A few current stores never match because the winners list uses a name the locator does
+not ("A To Z Convenience", Lynn). Resolving either case needs an address, which the winners list
+lacks. One judgment call to review: 7-Eleven franchise letters differ in some store-number matches
+(`32466-B` vs `32466C`). They are matched on the shared store number.
+
+**Outputs** (all in `data/processed/`):
+- `claims_pin_area.parquet`: one row per scratch claim matched to a retailer within 10 mi.
+  70,638 rows; 1,273 retailers; 32,303 rows within 5 mi. Columns: `listed_date, game_identifier,
+  game_name, prize_amount_usd, retailer_id, match_method, match_confidence, tract_geoid,
+  distance_mi`. `tract_geoid` is the Census-verified tract, null when the retailer's geocode is
+  flagged (64,782 rows have a tract). It includes matches in partial municipalities such as Boston.
+- `retailer_matches_pin_area.csv`: 1,473 matched (retailer, location) pairs.
+- `unresolved_retailer_matches.csv`: 378 pairs with candidates.
+- `location_municipality_map.csv`
+- `claims_pin_area_meta.json`: all the figures above.
 
 ## Join strategy to the winners list
 

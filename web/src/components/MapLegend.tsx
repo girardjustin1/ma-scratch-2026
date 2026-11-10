@@ -74,6 +74,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
         </Stack>
         <Typography variant="caption" sx={{ display: 'block', mt: 0.75, lineHeight: 1.4 }}>
           {metric === 'income' ? CAVEATS.ecological : metric === 'perRetailer' ? CAVEATS.perRetailer : CAVEATS.listedOnly}
+          {metric !== 'income' && <> {CAVEATS.matchedOnly}</>}
         </Typography>
       </Box>
     </Paper>

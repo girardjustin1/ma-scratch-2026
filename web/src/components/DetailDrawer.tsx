@@ -1,6 +1,6 @@
 import { Box, Drawer, IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import type { Claim, Coverage, Game, Retailer, TractMetrics, TractProps } from '../domain/types';
+import type { Claim, Coverage, GameRef, Retailer, TractMetrics, TractProps } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtDate, fmtInt, fmtUsd } from '../lib/format';
 import { CaveatNote, IncomeValue, Stat } from './Basics';
@@ -11,7 +11,7 @@ export interface DetailDrawerProps {
   tract?: TractProps;
   metrics?: TractMetrics;
   claims: Claim[];
-  games: Game[];
+  games: GameRef[];
   retailers: Retailer[];
   coverage: Coverage;
   inline?: boolean;
@@ -58,7 +58,7 @@ export function DetailBody({ tract, metrics, claims, games, retailers, coverage,
                 <TableRow key={c.id} hover>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDate(c.listedDate)}</TableCell>
                   <TableCell>{game.get(c.gameId)?.name}</TableCell>
-                  <TableCell align="right">${game.get(c.gameId)?.price}</TableCell>
+                  <TableCell align="right">{game.get(c.gameId)?.price != null ? `$${game.get(c.gameId)!.price}` : '—'}</TableCell>
                   <TableCell align="right">{fmtUsd(c.prizeAmount)}</TableCell>
                   <TableCell>{store.get(c.retailerId)?.name}</TableCell>
                 </TableRow>

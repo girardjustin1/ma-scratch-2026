@@ -24,7 +24,8 @@ shape the build:
 | `claims_scratch.parquet` | Parquet | 371,879 | same (1,095 days with scratch rows) | Statewide, 419 location values, 208 games |
 | `claims_per_day.csv` | CSV | 1,096 | same | Daily totals |
 | `retailers_pin_area.csv` | CSV | 1,806 | Swept 2026-11-10 | 1,483 inside the proven-complete 10 mi circle; 79 towns |
-| `retailer_matches_pin_area.csv` | CSV | 564 | — | Winner name+town → retailer id (partial; rerun on full claims pending) |
+| `claims_pin_area.parquet` | Parquet | 70,638 | 2023-11-09 → 2026-11-08 | Scratch claims matched to retailers in the 10 mi circle |
+| `location_municipality_map.csv` | CSV | — | — | Place string → municipality (neighbourhoods rolled up) |
 | `unresolved_retailer_matches.csv` | CSV | 216 | — | Never merged |
 | `games_history.parquet` | Parquet | 12,059 | Catalog snapshots 2023-11-01 → 2026-10-02 (60 dates) | 238 games |
 | `prize_tiers_history.parquet` | Parquet | 6,349 | 2025-01-06 → 2026-10-02 (42 dates) | 213 games; mostly top/secondary tiers |
@@ -58,8 +59,9 @@ Raw responses, with manifests (URL, fetch time, status, sha256), are under `data
 
 1. **No claim id.** Build one from the source day file plus row order within the day.
 2. **No retailer id.** Claims carry the retailer name and a place string only. Retailer ids
-   come from name+town matching (86.4% in towns fully inside the radius on the first partial
-   run). 571 scratch rows have no retailer name at all.
+   come from name+town matching. In municipalities fully inside the circle, 94.0% of claims
+   matched within 5 mi and 91.3% within 10 mi. Yearly rates 2023 → 2026 within 10 mi:
+   87.7 / 88.8 / 92.2 / 94.2%. 571 scratch rows have no retailer name at all.
 3. **No prize type.** The only annuity text in three years is 32 Lucky for Life rows (a draw
    game). Scratch amounts are plain dollars. Drop `prize_type` or default it to "as listed".
 4. **"Town" is a place string, not a municipality.** It includes neighbourhoods (Dorchester,
@@ -121,15 +123,13 @@ Also in the claims data:
 | Dataset | Area | Dates | Notes |
 | --- | --- | --- | --- |
 | `claims_town` | Statewide, by municipality (after roll-up) | 2023-11-09 → 2026-11-08 | Scratch only, over $600, by the selling retailer's place. Gap days: 2024-04-28 (0 scratch rows), Thanksgivings, 2026-01-26 and 2026-02-23 (low, unexplained) |
-| `claims_tract` | Circle of 10 mi around the owner's pin (complete retailer sweep) | same | Only claims matched to a Census-verified retailer. Tracts outside the circle, and claims at flagged or unmatched retailers, are no data. Match rate by year to be shown once the full rerun lands |
+| `claims_tract` | Circle of 10 mi around the owner's pin (complete retailer sweep) | same | Only claims matched to a Census-verified retailer: 91.3% matched within 10 mi, and 3,582 more are dropped for flagged geocodes. Tracts outside the circle are no data. Counts are a floor, not a total |
 | `retailers` | same circle | as of 2026-11-10 | Current list; not historical |
 | `tract_income` | Statewide | ACS 2019–2023, 2020–2024 | Two overlapping vintages, not a year-over-year change |
 | `prize_tiers` | Statewide | current + Wayback spots 2025-01 → 2026-10 | Spot coverage |
 
 ## Decisions needed
 
-- Whether the tract-level claims window should start only where the yearly match rate clears a
-  threshold (proposed: 80%). Older years lose stores that have since closed.
 - Whether to replace the weekday test (13) with a descriptive "listing schedule" chart.
 - Whether to sweep retailers statewide (about 300–800 locator calls) to unlock tract-level
   claims beyond the pin area.

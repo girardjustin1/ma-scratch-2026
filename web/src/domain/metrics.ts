@@ -1,6 +1,6 @@
 import { distance, point } from '@turf/turf';
 import type {
-  Claim, Coverage, Filters, Game, PrizeBand, Retailer, TractCollection, TractIncome, TractMetrics,
+  Claim, Coverage, Filters, GameRef, PrizeBand, Retailer, TractCollection, TractIncome, TractMetrics,
 } from './types';
 
 const BANDS: Record<PrizeBand, [number, number]> = {
@@ -23,7 +23,7 @@ export function isCovered(centroid: [number, number], coverage: Coverage) {
   return miles(centroid, coverage.center) <= coverage.radiusMiles;
 }
 
-export function filterClaims(claims: Claim[], games: Game[], filters: Filters, coverage: Coverage) {
+export function filterClaims(claims: Claim[], games: GameRef[], filters: Filters, coverage: Coverage) {
   const price = new Map(games.map((g) => [g.id, g.price]));
   const from = filters.dateFrom > coverage.dateFrom ? filters.dateFrom : coverage.dateFrom;
   const to = filters.dateTo < coverage.dateTo ? filters.dateTo : coverage.dateTo;

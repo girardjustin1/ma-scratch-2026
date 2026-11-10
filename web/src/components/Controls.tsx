@@ -3,7 +3,7 @@ import {
   TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import type { Filters, Game, MetricKey, PrizeBand } from '../domain/types';
+import type { Filters, GameRef, MetricKey, PrizeBand } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { MAPBOX_TOKEN, type Basemap } from '../map/mapStyle';
 
@@ -19,7 +19,7 @@ export function MetricSwitcher({ value, onChange }: { value: MetricKey; onChange
 
 const BANDS: { value: PrizeBand; label: string }[] = [
   { value: 'all', label: 'All listed prizes' },
-  { value: '600-999', label: '$600 – $999' },
+  { value: '600-999', label: '$601 – $999' },
   { value: '1k-9k', label: '$1,000 – $9,999' },
   { value: '10k-99k', label: '$10,000 – $99,999' },
   { value: '100k+', label: '$100,000 and up' },
@@ -27,7 +27,7 @@ const BANDS: { value: PrizeBand; label: string }[] = [
 
 export interface FilterBarProps {
   filters: Filters;
-  games: Game[];
+  games: GameRef[];
   minDate: string;
   maxDate: string;
   onChange: (f: Filters) => void;
@@ -36,7 +36,7 @@ export interface FilterBarProps {
 
 /** One row of filters above the map. Dates are Lottery-listed dates, day granularity. */
 export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset }: FilterBarProps) {
-  const prices = [...new Set(games.map((g) => g.price))].sort((a, b) => a - b);
+  const prices = [...new Set(games.map((g) => g.price).filter((p): p is number => p !== null))].sort((a, b) => a - b);
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
   return (
     <Stack direction="row" spacing={1.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
@@ -57,7 +57,7 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset 
           onChange={(e) => set({ gameIds: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value })}
           renderValue={(ids) => (ids.length === 1 ? games.find((g) => g.id === ids[0])?.name : `${ids.length} games`)}
         >
-          {games.map((g) => <MenuItem key={g.id} value={g.id}>{g.name} · ${g.price}</MenuItem>)}
+          {games.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}{g.price != null ? ` · $${g.price}` : ''}</MenuItem>)}
         </Select>
       </FormControl>
       <FormControl size="small" sx={{ minWidth: 130 }}>

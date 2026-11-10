@@ -3,7 +3,7 @@ import './worker';
 import { useCallback, useMemo, useState } from 'react';
 import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type ViewState } from '@vis.gl/react-maplibre';
 import type { Map as MlMap } from 'maplibre-gl';
-import { circle } from '@turf/turf';
+import { circle, distance, point } from '@turf/turf';
 import { Box, useTheme } from '@mui/material';
 import PlaceIcon from '@mui/icons-material/Place';
 import { classOf } from '../domain/classify';
@@ -66,17 +66,22 @@ export function ClaimsMap(props: ClaimsMapProps) {
     [tracts, byGeoid, metric, breaks],
   );
 
-  const retailerData = useMemo(
-    () => ({
-      type: 'FeatureCollection' as const,
-      features: retailers.map((r) => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
-        properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0 },
-      })),
-    }),
-    [retailers, claimsByRetailer],
-  );
+  // Bubble area scales with listed claims relative to the busiest store in view, so the
+  // largest bubble stays the same size whatever the filters.
+  const { retailerData, maxN } = useMemo(() => {
+    const features = retailers.map((r) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
+      properties: {
+        id: r.id,
+        n: claimsByRetailer.get(r.id) ?? 0,
+        inRadius: distance(point([r.lon, r.lat]), point(pin), { units: 'miles' }) <= radiusMiles ? 1 : 0,
+      },
+    }));
+    const maxN = Math.max(1, ...features.filter((f) => f.properties.inRadius).map((f) => f.properties.n));
+    return { retailerData: { type: 'FeatureCollection' as const, features }, maxN };
+  }, [retailers, claimsByRetailer, pin, radiusMiles]);
+  const dim = (op: number) => ['case', ['==', ['get', 'inRadius'], 1], op, op * 0.3];
 
   const radiusRing = useMemo(() => circle(pin, radiusMiles, { units: 'miles', steps: 96 }), [pin, radiusMiles]);
   const coverageRing = useMemo(
@@ -169,7 +174,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
                 'circle-color': 'rgba(0,0,0,0)',
                 'circle-stroke-color': bubbles[mode].hollow,
                 'circle-stroke-width': 1,
-                'circle-stroke-opacity': bubbleOpacity * 0.8,
+                'circle-stroke-opacity': dim(bubbleOpacity * 0.8) as never,
               }}
             />
             <Layer
@@ -177,12 +182,12 @@ export function ClaimsMap(props: ClaimsMapProps) {
               type="circle"
               filter={['>', ['get', 'n'], 0]}
               paint={{
-                'circle-radius': ['+', 3, ['*', 2.6, ['sqrt', ['get', 'n']]]],
+                'circle-radius': ['+', 2.5, ['*', 13, ['sqrt', ['min', 1, ['/', ['get', 'n'], maxN]]]]],
                 'circle-color': bubbles[mode].fill,
-                'circle-opacity': bubbleOpacity * 0.85,
+                'circle-opacity': dim(bubbleOpacity * 0.75) as never,
                 'circle-stroke-color': bubbles[mode].stroke,
-                'circle-stroke-width': 1.5,
-                'circle-stroke-opacity': bubbleOpacity,
+                'circle-stroke-width': 1,
+                'circle-stroke-opacity': dim(bubbleOpacity) as never,
               }}
             />
           </Source>

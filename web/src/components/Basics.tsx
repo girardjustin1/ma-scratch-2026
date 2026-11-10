@@ -59,10 +59,10 @@ export function IncomeValue({ value, moe, flag, compact }: { value: number | nul
   );
 }
 
-export function SampleBanner() {
+export function SampleBanner({ text = SAMPLE_NOTICE }: { text?: string }) {
   return (
     <Alert severity="info" icon={<ScienceOutlinedIcon fontSize="small" />} sx={{ py: 0, borderRadius: 0, border: 0 }}>
-      {SAMPLE_NOTICE}
+      {text}
     </Alert>
   );
 }

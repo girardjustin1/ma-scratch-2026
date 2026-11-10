@@ -20,3 +20,6 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 *.log
+
+# Local-only views built from Lottery data (never commit)
+web/public/local/

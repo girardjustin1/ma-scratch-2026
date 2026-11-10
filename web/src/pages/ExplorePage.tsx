@@ -5,7 +5,7 @@ import type { ViewState } from '@vis.gl/react-maplibre';
 import { countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
-  Claim, Coverage, Filters, Game, MetricKey, Retailer, TractCollection, TractIncome,
+  Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TractCollection, TractIncome,
 } from '../domain/types';
 import { ClaimsMap } from '../map/ClaimsMap';
 import type { Basemap } from '../map/mapStyle';
@@ -21,7 +21,7 @@ export interface ExploreData {
   income: TractIncome[];
   retailers: Retailer[];
   claims: Claim[];
-  games: Game[];
+  games: GameRef[];
   coverage: Coverage;
 }
 

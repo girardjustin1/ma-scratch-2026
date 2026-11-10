@@ -27,7 +27,8 @@ export const fmtShortDate = (iso: string) =>
 export const fmtWeekday = (iso: string) =>
   parse(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
-export const fmtRange = (from: string, to: string) => `${fmtShortDate(from)} – ${fmtDate(to)}`;
+export const fmtRange = (from: string, to: string) =>
+  `${from.slice(0, 4) === to.slice(0, 4) ? fmtShortDate(from) : fmtDate(from)} – ${fmtDate(to)}`;
 
 export function addDays(iso: string, days: number): string {
   const d = parse(iso);

@@ -20,11 +20,12 @@ export interface AppShellProps {
   online: boolean;
   mode: 'light' | 'dark';
   onToggleMode?: () => void;
-  sample?: boolean;
+  /** Banner stating which data is real and which is sample. */
+  notice?: string;
   children: React.ReactNode;
 }
 
-export function AppShell({ tab, onTab, online, mode, onToggleMode, sample = true, children }: AppShellProps) {
+export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, children }: AppShellProps) {
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <AppBar position="static" sx={{ bgcolor: 'background.paper' }}>
@@ -52,7 +53,7 @@ export function AppShell({ tab, onTab, online, mode, onToggleMode, sample = true
           )}
         </Toolbar>
       </AppBar>
-      {sample && <SampleBanner />}
+      {notice && <SampleBanner text={notice} />}
       <Box sx={{ flex: 1, minHeight: 0 }}>{children}</Box>
     </Box>
   );
