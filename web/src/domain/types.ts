@@ -40,7 +40,9 @@ export interface Game {
   name: string;
   price: number;
   launchDate: IsoDate;
-  status: 'open' | 'closing' | 'closed';
+  /** open = on sale; claims_only = no longer sold, prizes claimable until claimDeadline. */
+  status: 'open' | 'claims_only' | 'closed';
+  claimDeadline?: IsoDate;
   ticketsPrinted: number;
   overallOdds: number; // 1 in N
   originalTopPrize: number;

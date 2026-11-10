@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Grid, Paper, Stack, Typography } from '@mui/material';
 import type { Claim, Coverage, Game, LegacyEv, PrizeTier, StatResult } from '../domain/types';
-import { buildGameRows, OpenGamesTable } from '../components/OpenGamesTable';
+import { buildGameRows, buildPrizeRows, OpenGamesTable } from '../components/OpenGamesTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
 import { EvPanel } from '../components/EvPanel';
 import { MlGatePanel, StatCard, type MlGate } from '../components/Analysis';
@@ -18,12 +18,13 @@ export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap }:
   games: Game[]; tiers: PrizeTier[]; claims: Claim[]; coverage: Coverage; asOf: string; onFilterMap?: (gameId: string) => void;
 }) {
   const rows = useMemo(() => buildGameRows(games, tiers, claims), [games, tiers, claims]);
+  const prizeRows = useMemo(() => buildPrizeRows(games, tiers, claims), [games, tiers, claims]);
   const [sel, setSel] = useState(rows.slice().sort((a, b) => b.largestUnclaimed - a.largestUnclaimed)[0]?.game.id);
   const game = games.find((g) => g.id === sel);
   const from = addDays(asOf, -182);
   return (
     <Page>
-      <OpenGamesTable rows={rows} asOf={asOf} selectedId={sel} onSelect={(id) => { setSel(id); onFilterMap?.(id); }} />
+      <OpenGamesTable rows={rows} prizeRows={prizeRows} asOf={asOf} selectedId={sel} onSelect={(id) => { setSel(id); onFilterMap?.(id); }} />
       {game && (
         <Paper sx={{ p: 2 }}>
           <Typography variant="h2">{game.name}: listed claims, last six months</Typography>

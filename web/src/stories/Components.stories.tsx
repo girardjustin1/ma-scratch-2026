@@ -8,7 +8,7 @@ import { TractTooltip } from '../components/TractTooltip';
 import { MapLegend } from '../components/MapLegend';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
 import { DetailBody } from '../components/DetailDrawer';
-import { buildGameRows, OpenGamesTable } from '../components/OpenGamesTable';
+import { buildGameRows, buildPrizeRows, OpenGamesTable, type GamesView } from '../components/OpenGamesTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
 import { EvPanel } from '../components/EvPanel';
 import { MlGatePanel, StatCard } from '../components/Analysis';
@@ -119,9 +119,14 @@ export const DrillDownUncovered: Story = {
   ),
 };
 
-export const OpenGames: Story = {
-  render: () => <OpenGamesTable rows={buildGameRows(S.games, S.prizeTiers, S.claims)} asOf={S.AS_OF} />,
-};
+const gameRows = buildGameRows(S.games, S.prizeTiers, S.claims);
+const prizeRows = buildPrizeRows(S.games, S.prizeTiers, S.claims);
+const top100 = (view: GamesView): Story => ({
+  render: () => <OpenGamesTable key={view} rows={gameRows} prizeRows={prizeRows} asOf={S.AS_OF} initialView={view} />,
+});
+export const Top100OpenGames: Story = { name: 'Top 100 · open games', ...top100('open') };
+export const Top100Prizes: Story = { name: 'Top 100 · largest prizes', ...top100('prizes') };
+export const Top100WithClaimsOnly: Story = { name: 'Top 100 · with claims-only', ...top100('withClaimsOnly') };
 
 const topGame = S.games[3];
 export const Timeline: Story = {
