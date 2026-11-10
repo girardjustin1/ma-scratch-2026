@@ -4,7 +4,7 @@
 
 import { distance, point } from '@turf/turf';
 import type {
-  Claim, Coverage, Filters, Game, LegacyEv, PrizeTier, Retailer, StatResult,
+  Claim, Coverage, Filters, Game, GameRef, LegacyEv, PrizeTier, Retailer, StatResult,
   TractCollection, TractIncome,
 } from '../domain/types';
 import census from './census_sample.json';
@@ -99,6 +99,23 @@ export const prizeTiers: PrizeTier[] = games.flatMap((g) => {
     const remaining = isTop ? Math.max(0, Math.round(total * (1 - sold) + (r() - 0.6) * 2)) : Math.round(total * (1 - sold) * (0.9 + r() * 0.2));
     return { gameId: g.id, value, total, remaining: Math.min(total, remaining), isLaunchTopPrize: isTop };
   });
+});
+
+/** What the map's game picker sees: games plus their statewide prize summary. */
+export const gameRefs: GameRef[] = games.map((g) => {
+  const tiers = prizeTiers.filter((t) => t.gameId === g.id);
+  const over = tiers.filter((t) => t.value > 600);
+  const top = tiers.find((t) => t.isLaunchTopPrize);
+  const onSale = g.status === 'open';
+  return {
+    id: g.id, name: g.name, price: g.price, launchDate: g.launchDate, onSale,
+    prizes: onSale && top ? {
+      asOf: AS_OF,
+      remainingOver600: over.reduce((s, t) => s + t.remaining, 0),
+      totalOver600: over.reduce((s, t) => s + t.total, 0),
+      topPrize: top.value, topRemaining: top.remaining, topTotal: top.total,
+    } : null,
+  };
 });
 
 export const legacyEv: LegacyEv[] = games.slice(0, 14).map((g) => ({

@@ -7,6 +7,7 @@ import { CaveatNote, CoverageChip, IncomeValue } from '../components/Basics';
 import { TractTooltip } from '../components/TractTooltip';
 import { MapLegend } from '../components/MapLegend';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
+import { GamePicker } from '../components/GamePicker';
 import { DetailBody } from '../components/DetailDrawer';
 import { buildGameRows, buildPrizeRows, OpenGamesTable, type GamesView } from '../components/OpenGamesTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
@@ -85,7 +86,24 @@ export const Filters_: Story = {
   name: 'Filter bar',
   render: () => {
     const [f, setF] = useState<Filters>(S.defaultFilters);
-    return <FilterBar filters={f} games={S.games} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo} onChange={setF} onReset={() => setF(S.defaultFilters)} />;
+    return (
+      <FilterBar filters={f} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
+        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)} />
+    );
+  },
+};
+
+const sampleGameCounts = new Map<string, number>();
+for (const c of S.claims) sampleGameCounts.set(c.gameId, (sampleGameCounts.get(c.gameId) ?? 0) + 1);
+
+/** The game picker on its own. Click the field to open it. */
+export const GamePicker_: StoryObj<{ prices: number[] }> = {
+  name: 'Game picker',
+  args: { prices: [] as number[] },
+  argTypes: { prices: { control: 'check', options: [1, 2, 5, 10, 20, 30, 50] } },
+  render: (args) => {
+    const [ids, setIds] = useState<string[]>([]);
+    return <GamePicker games={S.gameRefs} value={ids} onChange={setIds} prices={args.prices} claimCounts={sampleGameCounts} />;
   },
 };
 

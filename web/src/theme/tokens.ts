@@ -34,11 +34,15 @@ export const chrome = {
   },
 } as const;
 
-/** Five quantile classes per metric, light → dark = low → high. */
+/**
+ * Five quantile classes per metric, indexed low → high. Claims run light → dark. Income is
+ * flipped (owner's call, 2026-11-10): the lowest-income class is darkest, richest lightest.
+ * Same validated steps, reversed order.
+ */
 export const ramps = {
   income: {
-    light: ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#0d366b'],
-    dark: ['#b7d3f6', '#86b6ef', '#5598e7', '#2a78d6', '#184f95'],
+    light: ['#0d366b', '#1c5cab', '#2a78d6', '#5598e7', '#86b6ef'],
+    dark: ['#184f95', '#2a78d6', '#5598e7', '#86b6ef', '#b7d3f6'],
   },
   claims: {
     light: ['#f29f72', '#ec7f4c', '#d95f2b', '#a8441a', '#73300f'],

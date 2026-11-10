@@ -12,7 +12,7 @@ import { addDays } from '../lib/format';
 import { LOCAL_NOTICE, SAMPLE_NOTICE } from '../lib/copy';
 
 export const sampleExploreData = {
-  tracts: S.tracts, income: S.tractIncome, retailers: S.retailers, claims: S.claims, games: S.games, coverage: S.coverage,
+  tracts: S.tracts, income: S.tractIncome, retailers: S.retailers, claims: S.claims, games: S.gameRefs, coverage: S.coverage,
 };
 
 function localFilters(d: ExploreData): Filters {

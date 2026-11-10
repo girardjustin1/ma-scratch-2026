@@ -24,6 +24,8 @@ export const CAVEATS = {
   radiusRule: 'A tract is included when its center point falls inside the circle.',
   evBanner: 'Statewide averages. This says nothing about which tickets any store holds.',
   association: 'Results describe association, not cause.',
+  unclaimedPrizes:
+    'Unclaimed prizes are statewide counts from the Lottery’s prize table: prizes not yet paid out, including tickets not yet sold. They say nothing about which store holds them.',
   matchedOnly:
     'Counts are a floor: claims at stores that could not be matched by name and town, or whose location could not be verified, are left out.',
 } as const;

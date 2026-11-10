@@ -53,6 +53,22 @@ export interface GameRef {
   id: string;
   name: string;
   price: number | null;
+  launchDate?: IsoDate | null;
+  /** In the Lottery's on-sale catalog on the prize-table date. Undefined = not known. */
+  onSale?: boolean;
+  /** Statewide prize table on one date. null = no table (game not on sale that day). */
+  prizes?: GamePrizes | null;
+}
+
+/** Statewide counts from the Lottery's prize table. Never per store. */
+export interface GamePrizes {
+  asOf: IsoDate;
+  /** Prizes over $600 not yet paid out (includes tickets not yet sold). */
+  remainingOver600: number;
+  totalOver600: number;
+  topPrize: number;
+  topRemaining: number;
+  topTotal: number;
 }
 
 export interface PrizeTier {

@@ -95,13 +95,40 @@ def main():
     ).fetchall()
     rows = [r for r in rows if r[4] in placed]
 
-    prices = dict(con.execute(
-        f"SELECT identifier, arg_max(price, snapshot_date) FROM read_parquet('{P / 'games_history.parquet'}') "
-        f"WHERE identifier IS NOT NULL GROUP BY 1"
-    ).fetchall())
-    game_ids = sorted({r[1] for r in rows})
+    # Game metadata: today's on-sale catalog first, Wayback catalog history as fallback.
+    hist = {ident: (price, start) for ident, price, start in con.execute(
+        f"SELECT identifier, arg_max(price, snapshot_date), arg_max(start_date, snapshot_date) "
+        f"FROM read_parquet('{P / 'games_history.parquet'}') WHERE identifier IS NOT NULL GROUP BY 1"
+    ).fetchall()}
+    catalog_file = sorted((ROOT / "data/raw/lottery_games").glob("*_games.json"))[-1]
+    on_sale = {g["identifier"]: g for g in json.loads(catalog_file.read_text()) if g["gameType"] == "Scratch"}
+    prizes = {}
+    current = P / "prizes_remaining_current.parquet"
+    if current.exists():
+        # Statewide prize table per game. Tiers over $600 match what the winners list shows.
+        for ident, as_of, rem, tot, top_prize, top_rem, top_tot in con.execute(f"""
+            SELECT identifier, max(as_of),
+                   sum(remaining) FILTER (WHERE prize_amount > 600), sum(total) FILTER (WHERE prize_amount > 600),
+                   max(prize_amount), arg_max(remaining, prize_amount), arg_max(total, prize_amount)
+            FROM read_parquet('{current}') GROUP BY 1""").fetchall():
+            prizes[ident] = {"asOf": as_of, "remainingOver600": int(rem or 0), "totalOver600": int(tot or 0),
+                             "topPrize": top_prize, "topRemaining": int(top_rem), "topTotal": int(top_tot)}
+
     names = {r[1]: r[2].strip() for r in rows}
-    games = [{"id": g, "name": names[g], "price": prices.get(g)} for g in game_ids]
+    names.update({k: g["name"].strip() for k, g in on_sale.items() if k not in names})
+    # Every game with placed claims, plus on-sale games with none yet (they show 0, not missing).
+    game_ids = sorted({r[1] for r in rows}) + sorted(set(on_sale) - {r[1] for r in rows})
+
+    def meta(g):
+        cat = on_sale.get(g)
+        price, start = hist.get(g, (None, None))
+        return {"id": g, "name": names[g],
+                "price": cat["price"] if cat and cat.get("price") is not None else price,
+                "launchDate": (cat or {}).get("startDate") or start,
+                "onSale": cat is not None,
+                "prizes": prizes.get(g)}
+
+    games = [meta(g) for g in game_ids]
     gidx = {g: i for i, g in enumerate(game_ids)}
 
     # Per-municipality match rates: what share of the town's listed scratch claims matched a
@@ -139,7 +166,8 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, separators=(",", ":")))
     print(f"{len(tracts)} tracts, {len(income)} income rows, {len(retailers)} placed retailers, "
-          f"{len(rows):,} claims, {len(games)} games, {out['coverage']['dateFrom']} → {out['coverage']['dateTo']} "
+          f"{len(rows):,} claims, {len(games)} games ({sum(g['onSale'] for g in games)} on sale, "
+          f"{sum(1 for g in games if g['prizes'])} with prize tables, {sum(g['price'] is None for g in games)} unpriced), {out['coverage']['dateFrom']} → {out['coverage']['dateTo']} "
           f"→ {OUT.relative_to(ROOT)} ({OUT.stat().st_size / 1e6:.1f} MB)")
     os.chmod(OUT, 0o600)
 

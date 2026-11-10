@@ -5,7 +5,7 @@ import type { ViewState } from '@vis.gl/react-maplibre';
 import { countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
-  Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome,
+  Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
 } from '../domain/types';
 import { ClaimsMap } from '../map/ClaimsMap';
 import type { Basemap } from '../map/mapStyle';
@@ -37,6 +37,17 @@ export interface ExplorePageProps {
   initialBasemap?: Basemap;
 }
 
+/** Listed claims per game inside the radius, ignoring the game and price filters. */
+function gameCountsInRadius(data: ExploreData, filters: Filters, metrics: TractMetrics[]) {
+  const tracts = new Set(metrics.filter((m) => m.inRadius && m.covered).map((m) => m.geoid));
+  const stores = new Set(data.retailers.filter((r) => tracts.has(r.tractGeoid)).map((r) => r.id));
+  const counts = new Map<string, number>();
+  for (const c of filterClaims(data.claims, data.games, { ...filters, gameIds: [], prices: [] }, data.coverage)) {
+    if (stores.has(c.retailerId)) counts.set(c.gameId, (counts.get(c.gameId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
   return useMemo(() => {
     const claims = filterClaims(data.claims, data.games, filters, data.coverage);
@@ -47,7 +58,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
     const claimsByRetailer = new Map<string, number>();
     for (const c of claims) claimsByRetailer.set(c.retailerId, (claimsByRetailer.get(c.retailerId) ?? 0) + 1);
     return {
-      claims, metrics, breaks, claimsByRetailer,
+      claims, metrics, breaks, claimsByRetailer, claimCounts: gameCountsInRadius(data, filters, metrics),
       min: values.length ? Math.min(...values) : 0,
       max: values.length ? Math.max(...values) : 0,
       tractCount: shown.length,
@@ -104,7 +115,7 @@ export function ExplorePage({
           </Stack>
           <FilterBar
             filters={filters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
-            onChange={setFilters} onReset={() => setFilters(initialFilters)}
+            claimCounts={a.claimCounts} onChange={setFilters} onReset={() => setFilters(initialFilters)}
           />
         </Stack>
       </Paper>

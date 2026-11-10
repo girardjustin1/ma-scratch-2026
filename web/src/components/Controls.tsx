@@ -6,6 +6,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import type { Filters, GameRef, MetricKey, PrizeBand } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { MAPBOX_TOKEN, type Basemap } from '../map/mapStyle';
+import { GamePicker, UNKNOWN_PRICE } from './GamePicker';
 
 export function MetricSwitcher({ value, onChange }: { value: MetricKey; onChange: (m: MetricKey) => void }) {
   return (
@@ -32,11 +33,16 @@ export interface FilterBarProps {
   maxDate: string;
   onChange: (f: Filters) => void;
   onReset?: () => void;
+  /** Listed claims per game in the radius, for the game picker's counts and sort. */
+  claimCounts?: Map<string, number>;
 }
 
+const NO_COUNTS = new Map<string, number>();
+
 /** One row of filters above the map. Dates are Lottery-listed dates, day granularity. */
-export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset }: FilterBarProps) {
+export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset, claimCounts }: FilterBarProps) {
   const prices = [...new Set(games.map((g) => g.price).filter((p): p is number => p !== null))].sort((a, b) => a - b);
+  const hasUnknown = games.some((g) => g.price === null);
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
   return (
     <Stack direction="row" spacing={1.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
@@ -50,24 +56,19 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset 
         slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: filters.dateFrom, max: maxDate } }}
         onChange={(e) => set({ dateTo: e.target.value })} sx={{ width: 150 }}
       />
-      <FormControl size="small" sx={{ minWidth: 190 }}>
-        <InputLabel>Game</InputLabel>
-        <Select
-          multiple value={filters.gameIds} input={<OutlinedInput label="Game" />}
-          onChange={(e) => set({ gameIds: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value })}
-          renderValue={(ids) => (ids.length === 1 ? games.find((g) => g.id === ids[0])?.name : `${ids.length} games`)}
-        >
-          {games.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}{g.price != null ? ` · $${g.price}` : ''}</MenuItem>)}
-        </Select>
-      </FormControl>
+      <GamePicker
+        games={games} value={filters.gameIds} onChange={(gameIds) => set({ gameIds })} prices={filters.prices}
+        claimCounts={claimCounts ?? NO_COUNTS}
+      />
       <FormControl size="small" sx={{ minWidth: 130 }}>
         <InputLabel>Ticket price</InputLabel>
         <Select
           multiple value={filters.prices} input={<OutlinedInput label="Ticket price" />}
           onChange={(e) => set({ prices: (e.target.value as number[]).map(Number) })}
-          renderValue={(ps) => ps.map((p) => `$${p}`).join(', ')}
+          renderValue={(ps) => ps.map((p) => (p === UNKNOWN_PRICE ? 'Unknown' : `$${p}`)).join(', ')}
         >
           {prices.map((p) => <MenuItem key={p} value={p}>${p}</MenuItem>)}
+          {hasUnknown && <MenuItem value={UNKNOWN_PRICE}>Price unknown</MenuItem>}
         </Select>
       </FormControl>
       <FormControl size="small" sx={{ minWidth: 170 }}>
