@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Box } from '@mui/material';
 import * as S from '../fixtures/sample';
 import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
@@ -9,7 +8,7 @@ import type { MetricKey } from '../domain/types';
 const meta: Meta = { title: 'Pages', parameters: { layout: 'fullscreen' } };
 export default meta;
 
-const Frame = ({ children }: { children: React.ReactNode }) => <Box sx={{ height: '100vh' }}>{children}</Box>;
+const Frame = ({ children }: { children: React.ReactNode }) => <div className="h-screen bg-secondary">{children}</div>;
 
 export const MapPage: StoryObj<{ metric: MetricKey; online: boolean }> = {
   name: "Map",

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import {
-  Box, Chip, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel,
-  ToggleButton, ToggleButtonGroup, Typography,
-} from '@mui/material';
+import type { SortDescriptor } from 'react-aria-components';
+import { Table, TableCard } from '@/components/application/table/table';
+import { Badge } from '@/components/base/badges/badges';
+import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
+import { cx } from '@/utils/cx';
 import type { Claim, Game, PrizeTier } from '../domain/types';
 import { fmtDate, fmtInt, fmtUsd } from '../lib/format';
 
@@ -74,19 +75,25 @@ const VIEWS: { value: GamesView; label: string; hint: string }[] = [
   { value: 'withClaimsOnly', label: 'With claims-only', hint: 'Games on sale plus games no longer sold whose prizes can still be claimed' },
 ];
 
-const muted = (s: string) => <Typography variant="body2" color="text.secondary">{s}</Typography>;
+const muted = (s: string) => <span className="text-quaternary">{s}</span>;
+
+/** Right-aligns a header (its label sits in a flex group) or a cell. */
+const RIGHT_HEAD = '[&>div]:justify-end text-right';
+const RIGHT = 'text-right tabular';
 
 function GameCell({ game }: { game: Game }) {
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <Box>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>{game.name}</Typography>
-        <Typography variant="caption">#{game.id.slice(1)}</Typography>
-      </Box>
+    <div className="flex items-center gap-2">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-primary">{game.name}</p>
+        <p className="text-xs text-tertiary tabular">#{game.id.slice(1)}</p>
+      </div>
       {game.status === 'claims_only' && (
-        <Chip size="small" variant="outlined" label={`Claims only${game.claimDeadline ? ` · until ${fmtDate(game.claimDeadline)}` : ''}`} />
+        <Badge type="modern" size="sm" color="gray" className="whitespace-nowrap">
+          {`Claims only${game.claimDeadline ? ` · until ${fmtDate(game.claimDeadline)}` : ''}`}
+        </Badge>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -111,94 +118,106 @@ export function OpenGamesTable({ rows, prizeRows = [], asOf, selectedId, onSelec
   const shown = Math.min(limit, total);
   const unit = view === 'prizes' ? 'unclaimed prize tiers' : view === 'open' ? 'open games' : 'games on sale or claims-only';
 
-  const head = (key: SortKey, label: string, align: 'left' | 'right' = 'left') => (
-    <TableCell align={align} sortDirection={sort === key ? dir : false}>
-      <TableSortLabel
-        active={sort === key}
-        direction={sort === key ? dir : 'desc'}
-        onClick={() => (sort === key ? setDir(dir === 'asc' ? 'desc' : 'asc') : (setSort(key), setDir('desc')))}
-      >
-        {label}
-      </TableSortLabel>
-    </TableCell>
-  );
+  // A new column starts descending; the same column flips direction (as before).
+  const sortDescriptor: SortDescriptor = { column: sort, direction: dir === 'asc' ? 'ascending' : 'descending' };
+  const onSortChange = (d: SortDescriptor) => {
+    if (d.column !== sort) {
+      setSort(d.column as SortKey);
+      setDir('desc');
+    } else setDir(dir === 'asc' ? 'desc' : 'asc');
+  };
+
+  const rowProps = (gameId: string) => ({
+    onAction: onSelect ? () => onSelect(gameId) : undefined,
+    className: cx(
+      // Selected: shaded row plus a dark bar on its leading edge, so it reads apart from hover.
+      gameId === selectedId && 'bg-secondary [&>td:first-child]:shadow-[inset_3px_0_0_0_var(--color-border-brand)]',
+      onSelect ? 'cursor-pointer' : 'cursor-default',
+    ),
+  });
 
   return (
-    <Paper>
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', px: 2, pt: 1.5, pb: 1, flexWrap: 'wrap' }} useFlexGap>
-        <Typography variant="h2">Top {limit}</Typography>
-        <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)} aria-label="Table view">
-          {VIEWS.map((v) => <ToggleButton key={v.value} value={v.value} title={v.hint}>{v.label}</ToggleButton>)}
-        </ToggleButtonGroup>
-        <Box sx={{ flex: 1 }} />
-        <Typography variant="caption">
-          {fmtInt(shown)} of {fmtInt(total)} {unit} · prizes remaining as of {fmtDate(asOf)}
-        </Typography>
-      </Stack>
-      <TableContainer sx={{ maxHeight: 560 }}>
+    <TableCard.Root size="sm">
+      <TableCard.Header
+        title={`Top ${limit}`}
+        description={`${fmtInt(shown)} of ${fmtInt(total)} ${unit} · prizes remaining as of ${fmtDate(asOf)}`}
+        contentTrailing={
+          <ButtonGroup
+            size="sm"
+            aria-label="Table view"
+            disallowEmptySelection
+            selectedKeys={new Set([view])}
+            onSelectionChange={(keys) => {
+              const k = [...keys][0];
+              if (k) setView(k as GamesView);
+            }}
+          >
+            {VIEWS.map((v) => (
+              <ButtonGroupItem key={v.value} id={v.value}>
+                <span title={v.hint}>{v.label}</span>
+              </ButtonGroupItem>
+            ))}
+          </ButtonGroup>
+        }
+      />
+      {/* Scroll inside the card so the sticky header stays in view (Table wraps itself in an overflow div). */}
+      <div className="[&>div]:max-h-140 [&>div]:overflow-y-auto">
         {view === 'prizes' ? (
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell align="right">Prize</TableCell>
-                <TableCell>Game</TableCell>
-                <TableCell align="right">Price</TableCell>
-                <TableCell align="right">Left of total</TableCell>
-                <TableCell>Launched</TableCell>
-                <TableCell>Most recent listed claim</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {prizes.slice(0, limit).map((r) => (
-                <TableRow
-                  key={`${r.game.id}-${r.tier.value}`} hover selected={r.game.id === selectedId}
-                  onClick={() => onSelect?.(r.game.id)} sx={{ cursor: onSelect ? 'pointer' : 'default' }}
-                >
-                  <TableCell align="right" sx={{ fontWeight: 650 }}>
-                    {fmtUsd(r.tier.value)}
-                    {r.tier.isLaunchTopPrize && <Typography variant="caption" sx={{ display: 'block' }}>Original top prize</Typography>}
-                  </TableCell>
-                  <TableCell><GameCell game={r.game} /></TableCell>
-                  <TableCell align="right">${r.game.price}</TableCell>
-                  <TableCell align="right">{fmtInt(r.tier.remaining)} of {fmtInt(r.tier.total)}</TableCell>
-                  <TableCell>{fmtDate(r.game.launchDate)}</TableCell>
-                  <TableCell>{r.lastListed ? fmtDate(r.lastListed) : muted('None in coverage')}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
+          <Table key="prizes" aria-label="Largest unclaimed prizes in games on sale">
+            <Table.Header className="sticky top-0 z-10">
+              <Table.Head id="prize" label="Prize" isRowHeader className={RIGHT_HEAD} />
+              <Table.Head id="game" label="Game" />
+              <Table.Head id="price" label="Price" className={RIGHT_HEAD} />
+              <Table.Head id="left" label="Left of total" className={RIGHT_HEAD} />
+              <Table.Head id="launched" label="Launched" />
+              <Table.Head id="lastListed" label="Most recent listed claim" />
+            </Table.Header>
+            <Table.Body>
+              {prizes.slice(0, limit).map((r) => {
+                const id = `${r.game.id}-${r.tier.value}`;
+                return (
+                  <Table.Row key={id} id={id} {...rowProps(r.game.id)}>
+                    <Table.Cell className={cx(RIGHT, 'font-semibold text-primary')}>
+                      {fmtUsd(r.tier.value)}
+                      {r.tier.isLaunchTopPrize && <span className="block text-xs font-normal text-tertiary">Original top prize</span>}
+                    </Table.Cell>
+                    <Table.Cell><GameCell game={r.game} /></Table.Cell>
+                    <Table.Cell className={RIGHT}>${r.game.price}</Table.Cell>
+                    <Table.Cell className={RIGHT}>{fmtInt(r.tier.remaining)} of {fmtInt(r.tier.total)}</Table.Cell>
+                    <Table.Cell className="whitespace-nowrap tabular">{fmtDate(r.game.launchDate)}</Table.Cell>
+                    <Table.Cell className="whitespace-nowrap tabular">{r.lastListed ? fmtDate(r.lastListed) : muted('None in coverage')}</Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
           </Table>
         ) : (
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Game</TableCell>
-                {head('price', 'Price', 'right')}
-                {head('launchDate', 'Launched')}
-                <TableCell align="right">Original top prize</TableCell>
-                <TableCell align="right">Top prizes left</TableCell>
-                {head('largestUnclaimed', 'Largest unclaimed', 'right')}
-                {head('lastListed', 'Most recent listed claim')}
-              </TableRow>
-            </TableHead>
-            <TableBody>
+          <Table key="games" aria-label="Games by largest unclaimed prize" sortDescriptor={sortDescriptor} onSortChange={onSortChange}>
+            <Table.Header className="sticky top-0 z-10">
+              <Table.Head id="game" label="Game" isRowHeader />
+              <Table.Head id="price" label="Price" allowsSorting className={RIGHT_HEAD} />
+              <Table.Head id="launchDate" label="Launched" allowsSorting />
+              <Table.Head id="originalTop" label="Original top prize" className={RIGHT_HEAD} />
+              <Table.Head id="topLeft" label="Top prizes left" className={RIGHT_HEAD} />
+              <Table.Head id="largestUnclaimed" label="Largest unclaimed" allowsSorting className={RIGHT_HEAD} />
+              <Table.Head id="lastListed" label="Most recent listed claim" allowsSorting />
+            </Table.Header>
+            <Table.Body>
               {gameRows.slice(0, limit).map((r) => (
-                <TableRow
-                  key={r.game.id} hover selected={r.game.id === selectedId}
-                  onClick={() => onSelect?.(r.game.id)} sx={{ cursor: onSelect ? 'pointer' : 'default' }}
-                >
-                  <TableCell><GameCell game={r.game} /></TableCell>
-                  <TableCell align="right">${r.game.price}</TableCell>
-                  <TableCell>{fmtDate(r.game.launchDate)}</TableCell>
-                  <TableCell align="right">{fmtUsd(r.game.originalTopPrize)}</TableCell>
-                  <TableCell align="right">{r.topRemaining} of {r.topTotal}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 650 }}>{fmtUsd(r.largestUnclaimed)}</TableCell>
-                  <TableCell>{r.lastListed ? fmtDate(r.lastListed) : muted('None in coverage')}</TableCell>
-                </TableRow>
+                <Table.Row key={r.game.id} id={r.game.id} {...rowProps(r.game.id)}>
+                  <Table.Cell><GameCell game={r.game} /></Table.Cell>
+                  <Table.Cell className={RIGHT}>${r.game.price}</Table.Cell>
+                  <Table.Cell className="whitespace-nowrap tabular">{fmtDate(r.game.launchDate)}</Table.Cell>
+                  <Table.Cell className={RIGHT}>{fmtUsd(r.game.originalTopPrize)}</Table.Cell>
+                  <Table.Cell className={RIGHT}>{r.topRemaining} of {r.topTotal}</Table.Cell>
+                  <Table.Cell className={cx(RIGHT, 'font-semibold text-primary')}>{fmtUsd(r.largestUnclaimed)}</Table.Cell>
+                  <Table.Cell className="whitespace-nowrap tabular">{r.lastListed ? fmtDate(r.lastListed) : muted('None in coverage')}</Table.Cell>
+                </Table.Row>
               ))}
-            </TableBody>
+            </Table.Body>
           </Table>
         )}
-      </TableContainer>
-    </Paper>
+      </div>
+    </TableCard.Root>
   );
 }

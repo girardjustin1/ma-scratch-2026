@@ -1,59 +1,61 @@
-import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
+import { AlertTriangle } from '@untitledui/icons';
 import type { Coverage, TractMetrics, TractProps } from '../domain/types';
 import { LABELS } from '../lib/copy';
-import { fmtInt, fmtPct, fmtShortDate } from '../lib/format';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { IncomeValue } from './Basics';
+import { fmtInt, fmtPct, fmtRange } from '../lib/format';
+import { Card, IncomeValue } from './Basics';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Stack direction="row" spacing={2} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-      <Typography variant="caption">{label}</Typography>
-      <Box sx={{ textAlign: 'right' }}>{children}</Box>
-    </Stack>
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="shrink-0 text-xs text-tertiary">{label}</span>
+      <div className="text-right">{children}</div>
+    </div>
   );
 }
 
-const muted = (s: string) => <Typography variant="body2" color="text.secondary">{s}</Typography>;
+const muted = (s: string) => <span className="text-sm text-quaternary">{s}</span>;
+const val = (s: string, strong?: boolean) => (
+  <span className={strong ? 'text-sm font-semibold text-primary tabular' : 'text-sm text-primary tabular'}>{s}</span>
+);
 
 /** Hover/tap card for one tract. Never shows EV. Missing coverage reads "No data". */
 export function TractTooltip({ tract, metrics, coverage }: { tract: TractProps; metrics: TractMetrics; coverage: Coverage }) {
   return (
-    <Paper sx={{ p: 1.5, width: 270, boxShadow: '0 6px 24px rgba(0,0,0,.18)' }}>
-      <Typography variant="h3">{tract.town}</Typography>
-      <Typography variant="caption">{tract.name} · {tract.geoid}</Typography>
-      <Divider sx={{ my: 1 }} />
-      <Stack spacing={0.75}>
+    <Card className="w-[270px] p-4 shadow-lg">
+      <p className="text-sm font-semibold text-primary">{tract.town}</p>
+      <p className="text-xs text-tertiary tabular">{tract.name} · {tract.geoid}</p>
+      <div className="my-3 border-t border-secondary" />
+      <div className="flex flex-col gap-1.5">
         <Row label={LABELS.listedClaims}>
-          {metrics.claims === null ? muted(LABELS.noData) : <Typography variant="body2" sx={{ fontWeight: 650 }}>{fmtInt(metrics.claims)}</Typography>}
+          {metrics.claims === null ? muted(LABELS.noData) : val(fmtInt(metrics.claims), true)}
         </Row>
         <Row label="Listed dates">
           {metrics.firstListed && metrics.lastListed
-            ? <Typography variant="body2">{fmtShortDate(metrics.firstListed)} – {fmtShortDate(metrics.lastListed)}</Typography>
+            ? val(fmtRange(metrics.firstListed, metrics.lastListed))
             : muted('—')}
         </Row>
-        <Row label="Licensed retailers"><Typography variant="body2">{fmtInt(metrics.retailers)}</Typography></Row>
+        <Row label="Licensed retailers">{val(fmtInt(metrics.retailers))}</Row>
         <Row label={LABELS.claimsPerRetailer}>
           {metrics.perRetailer === null
             ? muted(metrics.claims === null ? LABELS.noData : LABELS.notDefined)
-            : <Typography variant="body2">{metrics.perRetailer.toFixed(2)}</Typography>}
+            : val(metrics.perRetailer.toFixed(2))}
         </Row>
         <Row label={LABELS.medianIncome}>
           <IncomeValue value={metrics.income} moe={metrics.incomeMoe} flag={metrics.incomeFlag} compact />
         </Row>
-      </Stack>
+      </div>
       {metrics.lowMatch && metrics.townMatchRate !== null && (
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'flex-start', mt: 1, color: 'warning.dark' }}>
-          <WarningAmberIcon sx={{ fontSize: 15, mt: '1px', color: 'warning.main' }} />
-          <Typography variant="caption" sx={{ color: 'text.primary' }}>
+        <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-secondary p-2">
+          <AlertTriangle className="mt-px size-4 shrink-0 text-fg-secondary" aria-hidden />
+          <p className="text-xs leading-[1.45] text-secondary">
             Low match rate: only {fmtPct(metrics.townMatchRate)} of {tract.town}’s listed claims matched a store, so this count is low.
-          </Typography>
-        </Stack>
+          </p>
+        </div>
       )}
-      <Divider sx={{ my: 1 }} />
-      <Typography variant="caption">
+      <div className="my-3 border-t border-secondary" />
+      <p className="text-xs text-tertiary">
         {metrics.covered ? `Inside claims coverage (${coverage.label})` : 'Outside claims coverage: no claims data'}
-      </Typography>
-    </Paper>
+      </p>
+    </Card>
   );
 }

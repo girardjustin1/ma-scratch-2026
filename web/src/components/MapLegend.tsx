@@ -1,10 +1,11 @@
-import { Box, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { AlertTriangle } from '@untitledui/icons';
 import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtCompactUsd, fmtInt, fmtRange } from '../lib/format';
-import { noData, ramps, status, type Mode } from '../theme/tokens';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { useMode } from '../theme/mode';
+import { chrome, noData, ramps, status } from '../theme/tokens';
+import { Card } from './Basics';
 
 const TITLES: Record<MetricKey, string> = {
   claims: LABELS.listedClaims,
@@ -30,65 +31,73 @@ export interface MapLegendProps {
   lowMatchCount?: number;
 }
 
+/** Fixed-size slot so every key mark lines up with its label. */
+const Key = ({ children }: { children: React.ReactNode }) => (
+  <span className="flex h-3 w-[22px] shrink-0 items-center" aria-hidden>{children}</span>
+);
+
+/**
+ * Monochrome card. The only colors are the swatches that key the map, taken from the same
+ * tokens the map paints with, so the legend always matches what is drawn.
+ */
 export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0 }: MapLegendProps) {
-  const mode = useTheme().palette.mode as Mode;
+  const mode = useMode();
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
   const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v));
   const classes = ramp.slice(0, breaks.length + 1);
   const hatch = noData[mode];
+  const ink = chrome[mode].ink;
 
   return (
-    <Paper sx={{ p: 1.5, width: 260 }}>
-      <Typography variant="h3" sx={{ mb: 0.25 }}>{TITLES[metric]}</Typography>
-      <Typography variant="caption" sx={{ display: 'block', mb: 1 }}>
-        Quantile classes · {fmtInt(tractCount)} tracts
-      </Typography>
-      <Stack spacing={0.5}>
+    <Card className="w-[260px] p-4">
+      <p className="text-sm font-semibold text-primary">{TITLES[metric]}</p>
+      <p className="mb-2.5 text-xs text-tertiary tabular">Quantile classes · {fmtInt(tractCount)} tracts</p>
+      <ul className="flex flex-col gap-1.5">
         {classes.map((color, i) => (
-          <Stack key={color} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Box sx={{ width: 22, height: 12, borderRadius: 0.5, bgcolor: color }} />
-            <Typography variant="body2" className="tabular">
-              {labels[i]}
-            </Typography>
-          </Stack>
+          <li key={color} className="flex items-center gap-2">
+            <Key><span className="h-3 w-full rounded-sm" style={{ backgroundColor: color }} /></Key>
+            <span className="text-sm text-secondary tabular">{labels[i]}</span>
+          </li>
         ))}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Box
-            sx={{
-              width: 22, height: 12, borderRadius: 0.5,
-              background: `repeating-linear-gradient(135deg, ${hatch.line} 0 1.5px, ${hatch.fill} 1.5px 5px)`,
-              border: `1px solid ${hatch.line}`,
-            }}
-          />
-          <Typography variant="body2">
+        <li className="flex items-center gap-2">
+          <Key>
+            <span
+              className="h-3 w-full rounded-sm"
+              style={{
+                background: `repeating-linear-gradient(135deg, ${hatch.line} 0 1.5px, ${hatch.fill} 1.5px 5px)`,
+                border: `1px solid ${hatch.line}`,
+              }}
+            />
+          </Key>
+          <span className="text-sm text-secondary">
             {metric === 'perRetailer' ? 'No data or no retailers' : LABELS.noData}
-            <Typography component="span" variant="caption"> · {fmtInt(noDataCount)}</Typography>
-          </Typography>
-        </Stack>
-      </Stack>
-      <Box sx={{ mt: 1.25, pt: 1, borderTop: 1, borderColor: 'divider' }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
-          {!coverage.statewide && <Box sx={{ width: 22, borderTop: 2, borderColor: 'text.primary' }} />}
-          <Typography variant="caption">
+            <span className="text-xs text-tertiary tabular"> · {fmtInt(noDataCount)}</span>
+          </span>
+        </li>
+      </ul>
+      <div className="mt-3 flex flex-col gap-1.5 border-t border-secondary pt-3">
+        <div className="flex items-center gap-2">
+          {!coverage.statewide && <Key><span className="w-full" style={{ borderTop: `2px solid ${ink}`, opacity: 0.85 }} /></Key>}
+          <span className="text-xs text-secondary tabular">
             {coverage.statewide ? 'Coverage: statewide' : 'Coverage boundary'} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
-          </Typography>
-        </Stack>
+          </span>
+        </div>
         {metric !== 'income' && lowMatchCount > 0 && (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
-            <Box sx={{ width: 22, height: 12, border: `2px dashed ${status.warning}`, borderRadius: 0.5 }} />
-            <WarningAmberIcon sx={{ fontSize: 14, color: 'warning.main' }} />
-            <Typography variant="caption">Low match rate (under 80%) · {fmtInt(lowMatchCount)}</Typography>
-          </Stack>
+          <div className="flex items-center gap-2">
+            <Key><span className="h-3 w-full rounded-sm" style={{ border: `2px dashed ${status.warning}` }} /></Key>
+            <AlertTriangle className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden />
+            <span className="text-xs text-secondary tabular">Low match rate (under 80%) · {fmtInt(lowMatchCount)}</span>
+          </div>
         )}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Box sx={{ width: 22, borderTop: '2px dashed', borderColor: 'text.secondary' }} />
-          <Typography variant="caption">Search radius</Typography>
-        </Stack>
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.75, lineHeight: 1.4 }}>
+        <div className="flex items-center gap-2">
+          <Key><span className="w-full" style={{ borderTop: `2px dashed ${ink}`, opacity: 0.7 }} /></Key>
+          <span className="text-xs text-secondary">Search radius</span>
+        </div>
+        <p className="mt-1 text-xs leading-[1.45] text-tertiary">
           {metric === 'income' ? CAVEATS.ecological : metric === 'perRetailer' ? CAVEATS.perRetailer : CAVEATS.listedOnly}
           {metric !== 'income' && <> {CAVEATS.matchedOnly}</>}
-        </Typography>
-      </Box>
-    </Paper>
+        </p>
+      </div>
+    </Card>
   );
 }

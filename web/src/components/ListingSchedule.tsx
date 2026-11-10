@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as Plot from '@observablehq/plot';
-import { Box, Paper, Typography, useTheme } from '@mui/material';
 import type { Claim } from '../domain/types';
 import { fmtInt, fmtPct } from '../lib/format';
-import { chrome, ramps, type Mode } from '../theme/tokens';
-import { CaveatNote } from './Basics';
+import { chrome } from '../theme/tokens';
+import { useMode } from '../theme/mode';
+import { Card, CaveatNote } from './Basics';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -25,7 +25,7 @@ export function weekdayCounts(claims: Claim[]) {
  */
 export function ListingSchedule({ claims, source }: { claims: Claim[]; source: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const mode = useTheme().palette.mode as Mode;
+  const mode = useMode();
   const rows = useMemo(() => weekdayCounts(claims), [claims]);
   const total = rows.reduce((a, r) => a + r.n, 0);
 
@@ -42,7 +42,7 @@ export function ListingSchedule({ claims, source }: { claims: Claim[]; source: s
       marks: [
         Plot.ruleY([0], { stroke: c.axis }),
         Plot.barY(rows, {
-          x: 'day', y: 'n', fill: ramps.claims[mode][2], rx: 4,
+          x: 'day', y: 'n', fill: c.inkMuted, rx: 4, // greyscale: the bars carry no color meaning
           channels: { Share: (r: { share: number }) => fmtPct(r.share, 1) },
           tip: { format: { x: true, y: (v: number) => fmtInt(v) } },
         }),
@@ -56,17 +56,17 @@ export function ListingSchedule({ claims, source }: { claims: Claim[]; source: s
   }, [rows, mode]);
 
   return (
-    <Paper sx={{ p: 2, height: '100%' }}>
-      <Typography variant="h3">Lottery listing schedule</Typography>
-      <Typography variant="caption" sx={{ display: 'block' }}>
+    <Card className="h-full p-4">
+      <h3 className="text-md font-semibold text-primary">Lottery listing schedule</h3>
+      <p className="text-xs text-tertiary">
         Listed claims by weekday · {fmtInt(total)} claims · {source}
-      </Typography>
-      <Box ref={ref} sx={{ my: 1 }} />
+      </p>
+      <div ref={ref} className="my-2" />
       <CaveatNote dense>
         Listed dates follow when the Lottery processes claims, not when tickets were bought or played. Weekend listings
         are small because only prizes up to $5,000 can be cashed in the Lottery app. This chart is descriptive; no test is
         run on it.
       </CaveatNote>
-    </Paper>
+    </Card>
   );
 }

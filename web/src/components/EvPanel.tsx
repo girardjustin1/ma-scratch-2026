@@ -1,10 +1,13 @@
-import { Alert, Box, Chip, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
-import PublicIcon from '@mui/icons-material/Public';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { AlertTriangle, Globe01 } from '@untitledui/icons';
+import { Table, TableCard } from '@/components/application/table/table';
+import { BadgeWithIcon } from '@/components/base/badges/badges';
+import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
+import { cx } from '@/utils/cx';
 import { estimateEv } from '../domain/ev';
 import type { Game, LegacyEv, PrizeTier } from '../domain/types';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtSignedUsdCents } from '../lib/format';
+import { Card } from './Basics';
 
 const LIMITS = [
   'Claims lag sales, so prizes remaining overstates what is still unsold.',
@@ -22,6 +25,11 @@ export interface EvPanelProps {
   asOf: string;
 }
 
+const RIGHT_HEAD = '[&>div]:justify-end text-right';
+const RIGHT = 'text-right tabular';
+/** Divider that keeps the archived Wayback estimate visibly apart from the current one. */
+const LEGACY = 'border-l border-secondary';
+
 /** Statewide EV. Deliberately takes no map filters as props. */
 export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
   const legacyBy = new Map(legacy.map((l) => [l.gameId, l]));
@@ -29,71 +37,77 @@ export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
     .map((g) => ({ g, ev: estimateEv(g, tiers), legacy: legacyBy.get(g.id) }))
     .sort((a, b) => a.g.price - b.g.price || a.g.name.localeCompare(b.g.name));
   return (
-    <Stack spacing={2}>
-      <Alert severity="info" icon={<PublicIcon />} sx={{ fontWeight: 600 }}>{CAVEATS.evBanner}</Alert>
-      <Paper>
-        <Stack direction="row" sx={{ alignItems: 'baseline', justifyContent: 'space-between', px: 2, pt: 1.5, pb: 1 }}>
-          <Typography variant="h2">Statewide expected value</Typography>
-          <Typography variant="caption">Prizes remaining as of {fmtDate(asOf)} · map filters do not apply here</Typography>
-        </Stack>
-        <TableContainer sx={{ maxHeight: 560 }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Game</TableCell>
-                <TableCell align="right">Price</TableCell>
-                <TableCell align="right">Est. tickets remaining</TableCell>
-                <TableCell align="right">Net EV, all prizes</TableCell>
-                <TableCell align="right">Net EV, excl. original jackpot</TableCell>
-                <TableCell align="right" sx={{ borderLeft: 1, borderLeftColor: 'divider' }}>Earlier estimate (Wayback)</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+    <div className="flex flex-col gap-4">
+      {/* Monochrome banner: the icon and bold words carry it, not color. */}
+      <div role="note" className="flex items-center gap-3 rounded-xl bg-secondary px-4 py-3 ring-1 ring-secondary ring-inset">
+        <Globe01 className="size-5 shrink-0 text-fg-secondary" aria-hidden />
+        <p className="text-sm font-semibold text-primary">{CAVEATS.evBanner}</p>
+      </div>
+      <TableCard.Root size="sm">
+        <TableCard.Header
+          title="Statewide expected value"
+          description={`Prizes remaining as of ${fmtDate(asOf)} · map filters do not apply here`}
+        />
+        <div className="[&>div]:max-h-140 [&>div]:overflow-y-auto">
+          <Table aria-label="Statewide expected value by game">
+            <Table.Header className="sticky top-0 z-10">
+              <Table.Head id="game" label="Game" isRowHeader />
+              <Table.Head id="price" label="Price" className={RIGHT_HEAD} />
+              <Table.Head id="tickets" label="Est. tickets remaining" className={RIGHT_HEAD} />
+              <Table.Head id="evAll" label="Net EV, all prizes" className={RIGHT_HEAD} />
+              <Table.Head id="evEx" label="Net EV, excl. original jackpot" className={RIGHT_HEAD} />
+              <Table.Head id="legacy" label="Earlier estimate (Wayback)" className={cx(RIGHT_HEAD, LEGACY)} />
+            </Table.Header>
+            <Table.Body>
               {rows.map(({ g, ev, legacy: l }) => (
-                <TableRow key={g.id} hover>
-                  <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{g.name}</Typography></TableCell>
-                  <TableCell align="right">${g.price}</TableCell>
-                  <TableCell align="right">
+                <Table.Row key={g.id} id={g.id}>
+                  <Table.Cell className="font-medium text-primary">{g.name}</Table.Cell>
+                  <Table.Cell className={RIGHT}>${g.price}</Table.Cell>
+                  <Table.Cell className={RIGHT}>
                     {ev ? (
                       <Tooltip title={`Range from the two lowest prize tiers: ${fmtCompactUsd(ev.ticketsRemainingLow).slice(1)} – ${fmtCompactUsd(ev.ticketsRemainingHigh).slice(1)}`}>
-                        <span>{fmtCompactUsd(ev.ticketsRemaining).slice(1)}</span>
+                        <TooltipTrigger className="ml-auto cursor-help underline decoration-dotted decoration-fg-quaternary underline-offset-4">
+                          {fmtCompactUsd(ev.ticketsRemaining).slice(1)}
+                        </TooltipTrigger>
                       </Tooltip>
                     ) : '—'}
-                  </TableCell>
-                  <TableCell align="right">
+                  </Table.Cell>
+                  <Table.Cell className={RIGHT}>
                     {ev ? (
-                      <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <div className="flex items-center justify-end gap-1.5">
                         {ev.checkInputs && (
-                          <Chip size="small" color="warning" variant="outlined" icon={<WarningAmberIcon />} label="Check inputs" sx={{ height: 20 }} />
+                          <BadgeWithIcon type="modern" size="sm" color="gray" iconLeading={AlertTriangle} className="whitespace-nowrap">
+                            Check inputs
+                          </BadgeWithIcon>
                         )}
                         <span>{fmtSignedUsdCents(ev.evAll)}</span>
-                      </Stack>
+                      </div>
                     ) : '—'}
-                  </TableCell>
-                  <TableCell align="right">{ev ? fmtSignedUsdCents(ev.evExJackpot) : '—'}</TableCell>
-                  <TableCell align="right" sx={{ borderLeft: 1, borderLeftColor: 'divider' }}>
+                  </Table.Cell>
+                  <Table.Cell className={RIGHT}>{ev ? fmtSignedUsdCents(ev.evExJackpot) : '—'}</Table.Cell>
+                  <Table.Cell className={cx(RIGHT, LEGACY)}>
                     {l ? (
                       <Tooltip title={`${l.methodNote}. Computed from an archived full prize table; kept separate from the current estimate.`}>
-                        <Box>
-                          <span>{fmtSignedUsdCents(l.evAll)}</span>
-                          <Typography variant="caption" sx={{ display: 'block' }}>as of {fmtDate(l.asOf)}</Typography>
-                        </Box>
+                        <TooltipTrigger className="ml-auto cursor-help text-right">
+                          <span className="block">{fmtSignedUsdCents(l.evAll)}</span>
+                          <span className="block text-xs text-quaternary">as of {fmtDate(l.asOf)}</span>
+                        </TooltipTrigger>
                       </Tooltip>
-                    ) : <Typography variant="body2" color="text.secondary">None</Typography>}
-                  </TableCell>
-                </TableRow>
+                    ) : <span className="text-quaternary">None</span>}
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </TableBody>
+            </Table.Body>
           </Table>
-        </TableContainer>
-      </Paper>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" sx={{ mb: 1 }}>Limitations</Typography>
-        <Box component="ul" sx={{ m: 0, pl: 2.5, color: 'text.secondary', fontSize: 13, lineHeight: 1.7 }}>
+        </div>
+      </TableCard.Root>
+      <Card className="p-4">
+        <h3 className="mb-2 text-md font-semibold text-primary">Limitations</h3>
+        <ul className="m-0 list-disc pl-5 text-sm leading-[1.7] text-tertiary">
           {LIMITS.map((x) => <li key={x}>{x}</li>)}
           <li>A positive estimate is flagged "Check inputs". It is not presented as an opportunity.</li>
-        </Box>
-      </Paper>
-    </Stack>
+        </ul>
+      </Card>
+    </div>
   );
 }

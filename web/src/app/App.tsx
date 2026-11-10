@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CssBaseline, ThemeProvider } from '@mui/material';
-import { createAppTheme } from '../theme/theme';
+import { useEffect, useState } from 'react';
+import { ModeProvider } from '../theme/mode';
 import * as S from '../fixtures/sample';
 import { AppShell, type TabKey } from './AppShell';
 import { ExplorePage } from '../pages/ExplorePage';
@@ -33,12 +32,10 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
   const [mode, setMode] = useState<'light' | 'dark'>(initialMode);
   const [online, setOnline] = useState(false);
   const [mapGame, setMapGame] = useState<string | null>(null);
-  const theme = useMemo(() => createAppTheme(mode), [mode]);
   const filters = local ? localFilters(local) : mapGame ? { ...S.defaultFilters, gameIds: [mapGame] } : S.defaultFilters;
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ModeProvider mode={mode}>
       <AppShell tab={tab} onTab={setTab} online={online} mode={mode} onToggleMode={() => setMode(mode === 'dark' ? 'light' : 'dark')}
         notice={local ? LOCAL_NOTICE : SAMPLE_NOTICE}>
         {tab === 'map' && (
@@ -56,6 +53,6 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {tab === 'model' && <ModelPage gate={S.mlGate} />}
         {tab === 'data' && <DataPage sources={S.sources} online={online} onToggleOnline={setOnline} coverage={S.coverage} />}
       </AppShell>
-    </ThemeProvider>
+    </ModeProvider>
   );
 }

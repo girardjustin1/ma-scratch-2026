@@ -1,8 +1,8 @@
 import type { Preview } from '@storybook/react-vite';
-import { CssBaseline, ThemeProvider } from '@mui/material';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
-import { createAppTheme } from '../src/theme/theme';
+import '../src/theme/app.css';
+import { ModeProvider } from '../src/theme/mode';
 
 const preview: Preview = {
   globalTypes: {
@@ -21,10 +21,9 @@ const preview: Preview = {
   },
   decorators: [
     (Story, ctx) => (
-      <ThemeProvider theme={createAppTheme(ctx.globals.mode === 'dark' ? 'dark' : 'light')}>
-        <CssBaseline />
+      <ModeProvider mode={ctx.globals.mode === 'dark' ? 'dark' : 'light'}>
         <Story />
-      </ThemeProvider>
+      </ModeProvider>
     ),
   ],
 };

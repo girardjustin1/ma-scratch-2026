@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Box, Grid, Paper, Stack, Typography } from '@mui/material';
 import type { Claim, Coverage, Game, LegacyEv, PrizeTier, StatResult } from '../domain/types';
 import { buildGameRows, buildPrizeRows, OpenGamesTable } from '../components/OpenGamesTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
 import { EvPanel } from '../components/EvPanel';
 import { MlGatePanel, StatCard, type MlGate } from '../components/Analysis';
 import { SourcesPanel, type SourceRow } from '../components/SourcesPanel';
-import { CaveatNote } from '../components/Basics';
+import { Card, CaveatNote } from '../components/Basics';
 import { ListingSchedule } from '../components/ListingSchedule';
 import { CAVEATS } from '../lib/copy';
 import { addDays, fmtDate } from '../lib/format';
 
 const Page = ({ children }: { children: React.ReactNode }) => (
-  <Box sx={{ p: 3, overflow: 'auto', height: '100%' }}><Stack spacing={2.5} sx={{ maxWidth: 1240, mx: 'auto' }}>{children}</Stack></Box>
+  <div className="h-full overflow-auto p-6">
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">{children}</div>
+  </div>
 );
 
 export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap }: {
@@ -27,12 +28,12 @@ export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap }:
     <Page>
       <OpenGamesTable rows={rows} prizeRows={prizeRows} asOf={asOf} selectedId={sel} onSelect={(id) => { setSel(id); onFilterMap?.(id); }} />
       {game && (
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h2">{game.name}: listed claims, last six months</Typography>
-          <Typography variant="caption">Dot size by prize. Grey bands are periods with no claims coverage, not periods without claims.</Typography>
+        <Card className="p-4">
+          <h2 className="text-lg font-semibold text-primary">{game.name}: listed claims, last six months</h2>
+          <p className="text-xs text-tertiary">Dot size by prize. Grey bands are periods with no claims coverage, not periods without claims.</p>
           <WinnerTimeline claims={claims.filter((c) => c.gameId === game.id)} from={from} to={asOf} covered={[{ from: coverage.dateFrom, to: coverage.dateTo }]} width={1180} />
           <CaveatNote>{CAVEATS.listedOnly} {CAVEATS.listedDate}</CaveatNote>
-        </Paper>
+        </Card>
       )}
     </Page>
   );
@@ -47,16 +48,16 @@ export function StatsPage({ stats, schedule, sampleStats = true }: {
 }) {
   return (
     <Page>
-      <Box>
-        <Typography variant="h1">Statistical exploration</Typography>
-        <Typography variant="body2" color="text.secondary">
+      <div>
+        <h1 className="text-lg font-semibold text-primary">Statistical exploration</h1>
+        <p className="text-sm text-tertiary">
           Each test runs only above its sample gate. p-values are Benjamini–Hochberg adjusted across every test on this page.
-        </Typography>
-      </Box>
-      <Grid container spacing={2}>
-        {stats.map((s) => <Grid key={s.id} size={{ xs: 12, md: 6 }}><StatCard stat={s} sample={sampleStats} /></Grid>)}
-        <Grid size={{ xs: 12, md: 6 }}><ListingSchedule claims={schedule.claims} source={schedule.source} /></Grid>
-      </Grid>
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {stats.map((s) => <StatCard key={s.id} stat={s} sample={sampleStats} />)}
+        <div><ListingSchedule claims={schedule.claims} source={schedule.source} /></div>
+      </div>
       <CaveatNote>{CAVEATS.association} {CAVEATS.ecological} Spatial checks (Moran's I, block bootstrap, radius reruns, leave-one-town-out) appear with each result once real data is loaded.</CaveatNote>
     </Page>
   );
@@ -72,11 +73,11 @@ export function DataPage({ sources, online, onToggleOnline, coverage }: {
   return (
     <Page>
       <SourcesPanel sources={sources} online={online} onToggleOnline={onToggleOnline} />
-      <Paper sx={{ p: 2, maxWidth: 860 }}>
-        <Typography variant="h2" sx={{ mb: 1 }}>Coverage manifest</Typography>
-        <Typography variant="body2">Listed claims: {coverage.label}, {fmtDate(coverage.dateFrom)} to {fmtDate(coverage.dateTo)}.</Typography>
-        <Box sx={{ mt: 1 }}><CaveatNote>{CAVEATS.coverage}</CaveatNote></Box>
-      </Paper>
+      <Card className="max-w-[860px] p-4">
+        <h2 className="mb-1 text-lg font-semibold text-primary">Coverage manifest</h2>
+        <p className="text-sm text-secondary">Listed claims: {coverage.label}, {fmtDate(coverage.dateFrom)} to {fmtDate(coverage.dateTo)}.</p>
+        <CaveatNote className="mt-2">{CAVEATS.coverage}</CaveatNote>
+      </Card>
     </Page>
   );
 }

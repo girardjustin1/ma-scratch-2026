@@ -4,12 +4,12 @@ import { useCallback, useMemo, useState } from 'react';
 import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type ViewState } from '@vis.gl/react-maplibre';
 import type { Map as MlMap } from 'maplibre-gl';
 import { circle, distance, point } from '@turf/turf';
-import { Box, useTheme } from '@mui/material';
-import PlaceIcon from '@mui/icons-material/Place';
+import { MarkerPin02 } from '@untitledui/icons';
+import { useMode } from '../theme/mode';
 import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
-import { bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
+import { brand, bubbles, chrome, ramps, status, type Mode } from '../theme/tokens';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
 import { TractTooltip } from '../components/TractTooltip';
 
@@ -42,7 +42,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, height = '100%',
   } = props;
-  const mode = useTheme().palette.mode as Mode;
+  const mode = useMode();
   const [hover, setHover] = useState<{ x: number; y: number; geoid: string } | null>(null);
 
   const byGeoid = useMemo(() => new Map(metrics.map((m) => [m.geoid, m])), [metrics]);
@@ -113,7 +113,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const hoveredProps = hover ? tracts.features.find((f) => f.properties.geoid === hover.geoid)?.properties : undefined;
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height }}>
+    <div className="relative w-full" style={{ height }}>
       <MapGL
         key={mode /* re-create so the hatch matches the theme */}
         initialViewState={{ longitude: pin[0], latitude: pin[1], zoom: 10.4 }}
@@ -205,14 +205,14 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </Source>
         )}
         <Marker longitude={pin[0]} latitude={pin[1]} anchor="bottom">
-          <PlaceIcon sx={{ fontSize: 30, color: 'primary.main', filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.35))' }} />
+          <MarkerPin02 className="size-8" style={{ color: brand.primary[mode], filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.35))' }} />
         </Marker>
       </MapGL>
       {hover && hovered && hoveredProps && (
-        <Box sx={{ position: 'absolute', left: hover.x + 14, top: hover.y + 14, pointerEvents: 'none', zIndex: 2 }}>
+        <div className="pointer-events-none absolute z-[2]" style={{ left: hover.x + 14, top: hover.y + 14 }}>
           <TractTooltip tract={hoveredProps} metrics={hovered} coverage={coverage} />
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

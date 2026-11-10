@@ -16,6 +16,17 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
 - Statistics and ML show results only above their sample gates.
 - Wording lives in `web/src/lib/copy.ts`; colors in `web/src/theme/tokens.ts`.
 
+## UI system
+
+- Untitled UI React (MIT, Tailwind v4 + React Aria), copied into `web/src/uui/` and imported
+  as `@/components/...`. Keep those files close to upstream; app components live in
+  `web/src/components/`.
+- **Monochrome GUI.** Black, white and greys only (`web/src/theme/app.css` remaps every
+  palette to neutral). The only color is on the map: tract fills, retailer bubbles, pin, and
+  the legend swatches that key them, all from `tokens.ts` via MapLibre paint or inline style.
+  Charts are grey. Status is icon + words, never color.
+- Light/dark: `useMode()` from `web/src/theme/mode.tsx`; dark mode is `.dark-mode` on `<html>`.
+
 ## Data handling
 
 - `data/` and `.env*` are gitignored and never committed. The repo is **public**, and the

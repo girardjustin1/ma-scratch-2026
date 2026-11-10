@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import * as Plot from '@observablehq/plot';
-import { Box, useTheme } from '@mui/material';
 import type { Claim } from '../domain/types';
 import { LABELS } from '../lib/copy';
-import { chrome, ramps, type Mode } from '../theme/tokens';
+import { chrome } from '../theme/tokens';
+import { useMode } from '../theme/mode';
 
 export interface WinnerTimelineProps {
   claims: Claim[];
@@ -27,10 +27,13 @@ function gaps(from: string, to: string, covered: { from: string; to: string }[])
   return out;
 }
 
-/** Listed claims for one game over time. Grey bands = no coverage, so blank ≠ zero. */
+/**
+ * Listed claims for one game over time. Grey bands = no coverage, so blank ≠ zero.
+ * Greyscale by the owner's rule: dots are mid-grey ink, never a data color.
+ */
 export function WinnerTimeline({ claims, from, to, covered, width = 640, height = 150 }: WinnerTimelineProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const mode = useTheme().palette.mode as Mode;
+  const mode = useMode();
   useEffect(() => {
     const c = chrome[mode];
     const plot = Plot.plot({
@@ -52,9 +55,10 @@ export function WinnerTimeline({ claims, from, to, covered, width = 640, height 
           x: (k: Claim) => d(k.listedDate),
           y: 0.5,
           r: 'prizeAmount',
-          fill: ramps.claims[mode][2],
-          fillOpacity: 0.75,
-          stroke: c.surface,
+          fill: c.inkSecondary,
+          fillOpacity: 0.6,
+          // Ring in the card's own background so overlapping dots stay separable.
+          stroke: 'var(--color-bg-primary)',
           strokeWidth: 1.5,
           channels: { [LABELS.listedDate]: (k: Claim) => k.listedDate, Prize: (k: Claim) => `$${k.prizeAmount.toLocaleString()}` },
           tip: { format: { x: false, y: false, r: false } },
@@ -64,5 +68,5 @@ export function WinnerTimeline({ claims, from, to, covered, width = 640, height 
     ref.current?.replaceChildren(plot);
     return () => plot.remove();
   }, [claims, from, to, covered, width, height, mode]);
-  return <Box ref={ref} sx={{ '& svg': { overflow: 'visible' } }} />;
+  return <div ref={ref} className="[&_svg]:overflow-visible" />;
 }

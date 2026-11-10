@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Box, Stack } from '@mui/material';
 import * as S from '../fixtures/sample';
 import { computeTractMetrics, filterClaims } from '../domain/metrics';
 import { CaveatNote, CoverageChip, IncomeValue } from '../components/Basics';
@@ -35,20 +34,20 @@ const noRetailers = metrics.find((m) => m.covered && m.retailers === 0)!;
 
 export const Caveats: Story = {
   render: () => (
-    <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+    <div className="flex max-w-[560px] flex-col gap-3">
       <CoverageChip coverage={S.coverage} />
       {Object.values(CAVEATS).map((c) => <CaveatNote key={c}>{c}</CaveatNote>)}
-    </Stack>
+    </div>
   ),
 };
 
 export const IncomeWithMarginOfError: Story = {
   render: () => (
-    <Stack spacing={1.5}>
+    <div className="flex flex-col gap-3">
       <IncomeValue value={84200} moe={9100} flag="ok" />
       <IncomeValue value={61000} moe={23800} flag="high_moe" />
       <IncomeValue value={null} moe={null} flag="suppressed" />
-    </Stack>
+    </div>
   ),
 };
 
@@ -127,18 +126,18 @@ const selRet = new Set(S.retailers.filter((r) => r.tractGeoid === sel.geoid).map
 export const DrillDown: Story = {
   name: 'Drill-down drawer body',
   render: () => (
-    <Box sx={{ border: 1, borderColor: 'divider', display: 'inline-block', bgcolor: 'background.paper' }}>
+    <div className="inline-block rounded-xl bg-primary ring-1 ring-secondary">
       <DetailBody tract={props(sel.geoid)} metrics={sel} claims={S.claims.filter((c) => selRet.has(c.retailerId))}
         games={S.games} retailers={S.retailers} coverage={S.coverage} onClose={() => {}} />
-    </Box>
+    </div>
   ),
 };
 export const DrillDownUncovered: Story = {
   name: 'Drill-down · outside coverage',
   render: () => (
-    <Box sx={{ border: 1, borderColor: 'divider', display: 'inline-block', bgcolor: 'background.paper' }}>
+    <div className="inline-block rounded-xl bg-primary ring-1 ring-secondary">
       <DetailBody tract={props(uncovered.geoid)} metrics={uncovered} claims={[]} games={S.games} retailers={S.retailers} coverage={S.coverage} onClose={() => {}} />
-    </Box>
+    </div>
   ),
 };
 
@@ -165,9 +164,9 @@ export const ExpectedValue: Story = {
   render: () => <EvPanel games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} />,
 };
 
-export const StatResultCard: Story = { name: 'Stat card · result', render: () => <Box sx={{ maxWidth: 560 }}><StatCard stat={S.statResults[0]} /></Box> };
-export const StatGated: Story = { name: 'Stat card · insufficient sample', render: () => <Box sx={{ maxWidth: 560 }}><StatCard stat={S.statResults[2]} /></Box> };
-export const Schedule: Story = { name: 'Listing schedule (no test)', render: () => <Box sx={{ maxWidth: 600 }}><ListingSchedule claims={S.claims} source="sample data" /></Box> };
+export const StatResultCard: Story = { name: 'Stat card · result', render: () => <div className="max-w-[560px]"><StatCard stat={S.statResults[0]} /></div> };
+export const StatGated: Story = { name: 'Stat card · insufficient sample', render: () => <div className="max-w-[560px]"><StatCard stat={S.statResults[2]} /></div> };
+export const Schedule: Story = { name: 'Listing schedule (no test)', render: () => <div className="max-w-[600px]"><ListingSchedule claims={S.claims} source="sample data" /></div> };
 export const ModelGate: Story = { name: 'Model · below gate', render: () => <MlGatePanel gate={S.mlGate} /> };
 
 export const Sources: Story = {

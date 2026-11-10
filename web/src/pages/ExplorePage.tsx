@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Box, Paper, Stack, ToggleButton, Typography } from '@mui/material';
-import ViewColumnIcon from '@mui/icons-material/ViewColumn';
+import { Columns03 } from '@untitledui/icons';
+import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
@@ -98,59 +98,64 @@ export function ExplorePage({
     onSelectTract: setSelected,
   };
 
+  // Controls sit top-left, the legend bottom-right; each scrolls on its own so neither is
+  // clipped or overlaps the other on short windows.
+  const controlsBox = 'absolute top-3 left-3 max-h-[calc(100%-2.5rem)] overflow-y-auto';
+  const legendBox = 'absolute right-3 bottom-7 max-h-[calc(100%-5.5rem)] overflow-y-auto rounded-xl';
+
   return (
-    <Stack sx={{ height: '100%', minHeight: 0 }}>
-      <Paper square sx={{ px: 2, py: 1.25, borderWidth: '0 0 1px 0' }}>
-        <Stack spacing={1.25}>
-          <Stack direction="row" spacing={1.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <MetricSwitcher value={metric} onChange={setMetric} />
-            <ToggleButton size="small" value="compare" selected={compare} onChange={() => setCompare(!compare)}>
-              <ViewColumnIcon fontSize="small" sx={{ mr: 0.75 }} /> Side by side
-            </ToggleButton>
-            <Box sx={{ flex: 1 }} />
-            <CoverageChip coverage={data.coverage} />
-            <Typography variant="caption" className="tabular">
-              {fmtInt(a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius · {fmtInt(covered)} covered tracts
-            </Typography>
-          </Stack>
-          <FilterBar
-            filters={filters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
-            claimCounts={a.claimCounts} onChange={setFilters} onReset={() => setFilters(initialFilters)}
-          />
-        </Stack>
-      </Paper>
-      <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: compare ? '1fr 1fr' : '1fr', gap: '2px', bgcolor: 'divider' }}>
-        <Box sx={{ position: 'relative', minHeight: 0 }}>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-col gap-3 border-b border-secondary bg-primary px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <MetricSwitcher value={metric} onChange={setMetric} />
+          <Button size="sm" color={compare ? 'primary' : 'secondary'} iconLeading={Columns03} onClick={() => setCompare(!compare)}
+            aria-pressed={compare}>
+            Side by side
+          </Button>
+          <div className="flex-1" />
+          <CoverageChip coverage={data.coverage} />
+          <p className="text-xs text-tertiary tabular">
+            {fmtInt(a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius · {fmtInt(covered)} covered tracts
+          </p>
+        </div>
+        <FilterBar
+          filters={filters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
+          claimCounts={a.claimCounts} onChange={setFilters} onReset={() => setFilters(initialFilters)}
+        />
+      </div>
+      <div className="grid min-h-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
+        <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
             viewState={view} onMove={setView} />
-          {/* Left column: layers then legend, scrolling instead of overlapping on short windows. */}
-          <Box sx={{ position: 'absolute', left: 12, top: 12, bottom: 28, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto', pointerEvents: 'none', '& > *': { pointerEvents: 'auto', flexShrink: 0 } }}>
-            {!compare && <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />}
-            <Box sx={{ mt: 'auto' }}>
-              <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage} />
-            </Box>
-          </Box>
-          <Typography variant="caption" sx={{ position: 'absolute', right: 52, top: 14, bgcolor: 'background.paper', px: 1, borderRadius: 1, opacity: 0.9 }}>
+          {!compare && (
+            <div className={controlsBox}>
+              <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />
+            </div>
+          )}
+          <div className={legendBox}>
+            <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage} />
+          </div>
+          <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
             Double-click to move the pin · click a tract for its listed claims
-          </Typography>
-        </Box>
+          </p>
+        </div>
         {compare && (
-          <Box sx={{ position: 'relative', minHeight: 0 }}>
+          <div className="relative min-h-0">
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
               viewState={view} onMove={setView} />
-            <Box sx={{ position: 'absolute', left: 12, top: 12, bottom: 28, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto', pointerEvents: 'none', '& > *': { pointerEvents: 'auto', flexShrink: 0 } }}>
-              <Paper sx={{ p: 0.5, alignSelf: 'flex-start' }}><MetricSwitcher value={metricB} onChange={setMetricB} /></Paper>
-              <Box sx={{ mt: 'auto' }}>
-                <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage} />
-              </Box>
-            </Box>
-          </Box>
+            <div className={controlsBox}>
+              <div className="rounded-lg bg-primary p-1 shadow-xs ring-1 ring-secondary"><MetricSwitcher value={metricB} onChange={setMetricB} /></div>
+            </div>
+            <div className={legendBox}>
+              <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage} />
+            </div>
+          </div>
         )}
-      </Box>
+      </div>
       <DetailDrawer
         open={!!selected} onClose={() => setSelected(undefined)} tract={selTract} metrics={selMetrics}
         claims={selClaims} games={data.games} retailers={data.retailers} coverage={data.coverage}
       />
-    </Stack>
+    </div>
   );
 }

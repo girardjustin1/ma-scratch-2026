@@ -1,19 +1,18 @@
-import { Alert, Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
+import { AlertTriangle, Beaker02, Calendar, InfoCircle } from '@untitledui/icons';
+import { Badge, BadgeWithIcon } from '@/components/base/badges/badges';
+import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
+import { cx } from '@/utils/cx';
 import type { Coverage, IncomeFlag } from '../domain/types';
 import { fmtInt, fmtRange, fmtUsd } from '../lib/format';
 import { SAMPLE_NOTICE } from '../lib/copy';
 
 /** Inline caveat: icon + muted text. Used under every chart and panel it applies to. */
-export function CaveatNote({ children, dense }: { children: React.ReactNode; dense?: boolean }) {
+export function CaveatNote({ children, dense, className }: { children: React.ReactNode; dense?: boolean; className?: string }) {
   return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'flex-start', color: 'text.secondary' }}>
-      <InfoOutlinedIcon sx={{ fontSize: dense ? 14 : 16, mt: '2px' }} />
-      <Typography variant="caption" sx={{ lineHeight: 1.45 }}>{children}</Typography>
-    </Stack>
+    <div className={cx('flex items-start gap-1.5 text-tertiary', className)}>
+      <InfoCircle className={cx('shrink-0 text-fg-quaternary', dense ? 'mt-px size-3.5' : 'mt-0.5 size-4')} aria-hidden />
+      <p className="text-xs leading-[1.45]">{children}</p>
+    </div>
   );
 }
 
@@ -21,12 +20,11 @@ export function CaveatNote({ children, dense }: { children: React.ReactNode; den
 export function CoverageChip({ coverage }: { coverage: Coverage }) {
   return (
     <Tooltip title="Claims data exists only inside this area and date window. Everything else shows as no data.">
-      <Chip
-        size="small"
-        variant="outlined"
-        icon={<EventOutlinedIcon />}
-        label={`Coverage: ${coverage.label} · ${fmtRange(coverage.dateFrom, coverage.dateTo)}`}
-      />
+      <TooltipTrigger className="cursor-default">
+        <BadgeWithIcon type="modern" size="md" color="gray" iconLeading={Calendar}>
+          Coverage: {coverage.label} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
+        </BadgeWithIcon>
+      </TooltipTrigger>
     </Tooltip>
   );
 }
@@ -35,46 +33,51 @@ export function CoverageChip({ coverage }: { coverage: Coverage }) {
 export function IncomeValue({ value, moe, flag, compact }: { value: number | null; moe: number | null; flag: IncomeFlag; compact?: boolean }) {
   if (value === null || flag === 'suppressed') {
     return (
-      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-        <WarningAmberIcon sx={{ fontSize: 15, color: 'warning.main' }} />
-        <Typography variant="body2" color="text.secondary">Estimate suppressed by Census</Typography>
-      </Stack>
+      <div className="flex items-center gap-1 text-sm text-tertiary">
+        <AlertTriangle className="size-4 text-fg-secondary" aria-hidden />
+        Estimate suppressed by Census
+      </div>
     );
   }
   return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
-      <Typography variant="body2" sx={{ fontWeight: 650 }} className="tabular">{fmtUsd(value)}</Typography>
-      <Typography variant="caption" className="tabular">± {fmtUsd(moe ?? 0)}</Typography>
+    <div className="flex flex-wrap items-baseline gap-1.5">
+      <span className="text-sm font-semibold text-primary tabular">{fmtUsd(value)}</span>
+      <span className="text-xs text-tertiary tabular">± {fmtUsd(moe ?? 0)}</span>
       {flag === 'high_moe' && (
-        <Chip
-          size="small"
-          color="warning"
-          variant="outlined"
-          icon={<WarningAmberIcon />}
-          label={compact ? 'Uncertain' : 'Very uncertain estimate'}
-          sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }}
-        />
+        <BadgeWithIcon type="modern" size="sm" color="gray" iconLeading={AlertTriangle}>
+          {compact ? 'Uncertain' : 'Very uncertain estimate'}
+        </BadgeWithIcon>
       )}
-    </Stack>
+    </div>
   );
 }
 
+/** Full-width notice stating which data is real and which is sample. */
 export function SampleBanner({ text = SAMPLE_NOTICE }: { text?: string }) {
   return (
-    <Alert severity="info" icon={<ScienceOutlinedIcon fontSize="small" />} sx={{ py: 0, borderRadius: 0, border: 0 }}>
+    <div className="flex items-center gap-2 border-b border-secondary bg-secondary px-6 py-2 text-sm text-secondary">
+      <Beaker02 className="size-4 shrink-0 text-fg-quaternary" aria-hidden />
       {text}
-    </Alert>
+    </div>
   );
+}
+
+/** "Sample" tag for any number that is not real data. */
+export function SampleTag() {
+  return <Badge type="modern" size="sm" color="gray">Sample</Badge>;
 }
 
 export function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <Box>
-      <Typography variant="caption" sx={{ display: 'block' }}>{label}</Typography>
-      <Typography sx={{ fontSize: 20, fontWeight: 650, lineHeight: 1.25 }}>
-        {typeof value === 'number' ? fmtInt(value) : value}
-      </Typography>
-      {sub && <Typography variant="caption">{sub}</Typography>}
-    </Box>
+    <div>
+      <p className="text-xs font-medium text-tertiary">{label}</p>
+      <p className="text-display-xs font-semibold text-primary tabular">{typeof value === 'number' ? fmtInt(value) : value}</p>
+      {sub && <p className="text-xs text-tertiary">{sub}</p>}
+    </div>
   );
+}
+
+/** White card with a border: the panel surface used across the app. */
+export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cx('rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset', className)}>{children}</div>;
 }

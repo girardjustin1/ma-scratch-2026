@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { ChevronDown, SearchLg, SwitchVertical01 } from '@untitledui/icons';
 import {
-  Box, Button, Checkbox, Chip, Divider, FormControlLabel, InputAdornment, List, ListItemButton, ListSubheader,
-  MenuItem, Popover, Select, Stack, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography,
-} from '@mui/material';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import SearchIcon from '@mui/icons-material/Search';
+  Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Header as AriaHeader,
+  ListBox as AriaListBox, ListBoxItem as AriaListBoxItem, ListBoxSection as AriaListBoxSection,
+  Popover as AriaPopover, Text as AriaText,
+} from 'react-aria-components';
+import { Badge } from '@/components/base/badges/badges';
+import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
+import { Button } from '@/components/base/buttons/button';
+import { CheckboxBase } from '@/components/base/checkbox/checkbox';
+import { Input } from '@/components/base/input/input';
+import { Select } from '@/components/base/select/select';
+import { Toggle } from '@/components/base/toggle/toggle';
+import { cx } from '@/utils/cx';
 import type { GameRef } from '../domain/types';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
@@ -67,16 +75,14 @@ export function arrangeGames(args: {
 
 function Metric({ value, label, muted }: { value: string; label: string; muted?: boolean }) {
   return (
-    <Box sx={{ textAlign: 'right', minWidth: 76 }}>
-      <Typography variant="body2" className="tabular" sx={{ fontWeight: 600, color: muted ? 'text.disabled' : 'text.primary' }}>
-        {value}
-      </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>{label}</Typography>
-    </Box>
+    <div className="w-26 shrink-0 text-right whitespace-nowrap">
+      <p className={cx('text-sm font-semibold tabular', muted ? 'text-quaternary' : 'text-primary')}>{value}</p>
+      <p className="text-xs leading-tight text-tertiary">{label}</p>
+    </div>
   );
 }
 
-function GameRow({ g, checked, claims, onToggle }: { g: GameRef; checked: boolean; claims: number; onToggle: () => void }) {
+function GameRow({ g, claims }: { g: GameRef; claims: number }) {
   const p = g.prizes;
   const meta = [
     g.price != null ? `$${g.price}` : 'Price unknown',
@@ -84,19 +90,30 @@ function GameRow({ g, checked, claims, onToggle }: { g: GameRef; checked: boolea
     p ? `Top prize ${fmtCompactUsd(p.topPrize)}` : null,
   ].filter(Boolean).join(' · ');
   return (
-    <ListItemButton dense onClick={onToggle} sx={{ gap: 1, py: 0.5, alignItems: 'center' }}>
-      <Checkbox size="small" checked={checked} tabIndex={-1} disableRipple sx={{ p: 0.5 }} />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          <Typography variant="body2" noWrap>{g.name}</Typography>
-          {g.onSale === false && <Chip size="small" variant="outlined" label="Not on sale" sx={{ height: 18, fontSize: 11 }} />}
-        </Stack>
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{meta}</Typography>
-      </Box>
-      <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />
-      <Metric value={p ? `${fmtInt(p.topRemaining)} of ${fmtInt(p.topTotal)}` : '—'} label="top prizes left" muted={!p} />
-      <Metric value={fmtInt(claims)} label="listed in radius" muted={claims === 0} />
-    </ListItemButton>
+    <AriaListBoxItem
+      id={g.id} textValue={g.name}
+      className={({ isHovered, isFocused, isFocusVisible }) => cx(
+        'flex cursor-pointer items-center gap-3 px-4 py-2 outline-hidden select-none',
+        (isHovered || isFocused) && 'bg-primary_hover',
+        isFocusVisible && 'ring-2 ring-focus-ring ring-inset',
+      )}
+    >
+      {({ isSelected }) => (
+        <>
+          <CheckboxBase size="sm" isSelected={isSelected} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <AriaText slot="label" className="truncate text-sm font-medium text-primary">{g.name}</AriaText>
+              {g.onSale === false && <Badge type="modern" size="sm" color="gray">Not on sale</Badge>}
+            </div>
+            <AriaText slot="description" className="block truncate text-xs text-tertiary">{meta}</AriaText>
+          </div>
+          <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />
+          <Metric value={p ? `${fmtInt(p.topRemaining)} of ${fmtInt(p.topTotal)}` : '—'} label="top prizes left" muted={!p} />
+          <Metric value={fmtInt(claims)} label="listed in radius" muted={claims === 0} />
+        </>
+      )}
+    </AriaListBoxItem>
   );
 }
 
@@ -115,7 +132,7 @@ export interface GamePickerProps {
  * Unclaimed-prize counts are statewide and never imply what any store holds.
  */
 export function GamePicker({ games, value, onChange, prices, claimCounts }: GamePickerProps) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const labelId = useId();
   const [query, setQuery] = useState('');
   const hasSaleInfo = games.some((g) => g.onSale !== undefined);
   const [onSaleOnly, setOnSaleOnly] = useState(hasSaleInfo);
@@ -128,92 +145,116 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
   );
   const asOf = games.find((g) => g.prizes)?.prizes?.asOf;
   const onSaleCount = games.filter((g) => g.onSale).length;
-  const selected = new Set(value);
-  const toggle = (id: string) => onChange(selected.has(id) ? value.filter((v) => v !== id) : [...value, id]);
   const shownIds = groups.flatMap((gr) => gr.games.map((g) => g.id));
 
   const display =
     value.length === 0 ? 'All games' : value.length === 1 ? (games.find((g) => g.id === value[0])?.name ?? '1 game') : `${value.length} games`;
 
+  const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} />);
+
   return (
-    <>
-      <TextField
-        size="small" label="Game" value={display} onClick={(e) => setAnchor(e.currentTarget)}
-        slotProps={{
-          input: { readOnly: true, endAdornment: <ArrowDropDownIcon sx={{ color: 'action.active', mr: -0.5 }} /> },
-          htmlInput: { 'aria-haspopup': 'dialog', style: { cursor: 'pointer', textOverflow: 'ellipsis' } },
-        }}
-        sx={{ width: 220, '& .MuiInputBase-root': { cursor: 'pointer' } }}
-      />
-      <Popover
-        open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { width: 640, maxHeight: '75vh', display: 'flex', flexDirection: 'column' } } }}
-      >
-        <Stack spacing={1.25} sx={{ p: 1.5 }}>
-          <TextField
-            size="small" autoFocus placeholder="Search games" value={query} onChange={(e) => setQuery(e.target.value)}
-            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
-          />
-          <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            {hasSaleInfo && (
-              <ToggleButtonGroup size="small" exclusive value={onSaleOnly ? 'sale' : 'all'} onChange={(_, v) => v && setOnSaleOnly(v === 'sale')}>
-                <ToggleButton value="sale">On sale now · {onSaleCount}</ToggleButton>
-                <ToggleButton value="all">All games · {games.length}</ToggleButton>
-              </ToggleButtonGroup>
+    <div className="flex flex-col gap-1.5">
+      <span id={labelId} className="text-sm font-medium text-secondary">Game</span>
+      <AriaDialogTrigger>
+        <AriaButton
+          aria-labelledby={labelId} aria-haspopup="dialog"
+          className={({ isFocusVisible, isPressed }) => cx(
+            'relative flex w-[220px] cursor-pointer items-center gap-2 rounded-lg bg-primary py-2 pr-2.5 pl-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset',
+            (isFocusVisible || isPressed) && 'ring-2 ring-brand',
+          )}
+        >
+          <span className="flex-1 truncate text-sm font-medium text-primary">{display}</span>
+          <ChevronDown aria-hidden className="size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />
+        </AriaButton>
+        <AriaPopover
+          placement="bottom start" offset={4} containerPadding={8}
+          className={({ isEntering, isExiting }) => cx(
+            'flex max-h-[75vh] w-[640px] flex-col overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform',
+            isEntering && 'duration-150 ease-out animate-in fade-in placement-bottom:slide-in-from-top-0.5 placement-top:slide-in-from-bottom-0.5',
+            isExiting && 'duration-100 ease-in animate-out fade-out placement-bottom:slide-out-to-top-0.5 placement-top:slide-out-to-bottom-0.5',
+          )}
+        >
+          <AriaDialog aria-label="Choose games" className="flex min-h-0 flex-1 flex-col outline-hidden">
+            {({ close }) => (
+              <>
+                <div className="flex flex-col gap-3 p-4">
+                  <div className="flex items-center gap-4">
+                    <Input size="sm" icon={SearchLg} placeholder="Search games" autoFocus value={query} onChange={setQuery} className="flex-1" />
+                    <Toggle size="sm" label="Group by price" isSelected={groupByPrice} onChange={setGroupByPrice} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {hasSaleInfo && (
+                      <ButtonGroup
+                        size="sm" aria-label="Sale status" disallowEmptySelection selectedKeys={[onSaleOnly ? 'sale' : 'all']}
+                        onSelectionChange={(keys) => {
+                          const k = [...keys][0];
+                          if (k) setOnSaleOnly(k === 'sale');
+                        }}
+                      >
+                        <ButtonGroupItem id="sale" className="selected:bg-tertiary selected:text-primary">
+                          On sale now · <span className="tabular">{onSaleCount}</span>
+                        </ButtonGroupItem>
+                        <ButtonGroupItem id="all" className="selected:bg-tertiary selected:text-primary">
+                          All games · <span className="tabular">{games.length}</span>
+                        </ButtonGroupItem>
+                      </ButtonGroup>
+                    )}
+                    <Select
+                      size="sm" aria-label="Sort games" icon={SwitchVertical01} className="min-w-0 flex-1"
+                      items={SORTS.map((s) => ({ id: s.value, label: s.label }))}
+                      selectedKey={sort} onSelectionChange={(k) => k && setSort(k as GameSort)}
+                    >
+                      {(item) => <Select.Item id={item.id} label={item.label} />}
+                    </Select>
+                  </div>
+                  {prices.length > 0 && (
+                    <p className="text-xs text-tertiary">
+                      Showing {prices.map((p) => (p === UNKNOWN_PRICE ? 'unknown-price' : `$${p}`)).join(', ')} games, set by the Ticket price filter.
+                    </p>
+                  )}
+                </div>
+                <AriaListBox
+                  aria-label="Games" selectionMode="multiple" selectedKeys={new Set(value)}
+                  onSelectionChange={(keys) =>
+                    onChange(keys === 'all' ? [...new Set([...value, ...shownIds])] : [...keys].map(String))
+                  }
+                  renderEmptyState={() => <p className="p-4 text-sm text-tertiary">No games match.</p>}
+                  className="min-h-30 flex-1 overflow-y-auto border-y border-secondary outline-hidden"
+                >
+                  {groups.map((gr) =>
+                    gr.label ? (
+                      <AriaListBoxSection key={gr.key} id={gr.key}>
+                        <AriaHeader className="sticky top-0 z-10 border-b border-secondary bg-secondary px-4 py-1.5 text-xs font-semibold text-secondary">
+                          {gr.label}
+                        </AriaHeader>
+                        {rows(gr.games)}
+                      </AriaListBoxSection>
+                    ) : (
+                      rows(gr.games)
+                    ),
+                  )}
+                </AriaListBox>
+                <div className="flex flex-col gap-3 p-4">
+                  <CaveatNote dense>
+                    {CAVEATS.unclaimedPrizes}{asOf ? ` Prize table as of ${fmtDate(asOf)}.` : ''} “—” means no prize table for that game.
+                  </CaveatNote>
+                  <div className="flex items-center gap-2">
+                    <p className="flex-1 text-xs text-tertiary tabular">
+                      {value.length ? `${value.length} selected` : 'No game selected: the map shows all games'} · {total} shown
+                    </p>
+                    <Button size="sm" color="secondary" isDisabled={!shownIds.length}
+                      onClick={() => onChange([...new Set([...value, ...shownIds])])}>
+                      Select shown
+                    </Button>
+                    <Button size="sm" color="secondary" isDisabled={!value.length} onClick={() => onChange([])}>Clear</Button>
+                    <Button size="sm" color="primary" onClick={close}>Done</Button>
+                  </div>
+                </div>
+              </>
             )}
-            <Select size="small" value={sort} onChange={(e) => setSort(e.target.value as GameSort)} sx={{ minWidth: 250 }}
-              renderValue={(v) => `Sort: ${SORTS.find((s) => s.value === v)?.label}`}>
-              {SORTS.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
-            </Select>
-            <FormControlLabel
-              control={<Switch size="small" checked={groupByPrice} onChange={(e) => setGroupByPrice(e.target.checked)} />}
-              label={<Typography variant="caption">Group by price</Typography>} sx={{ ml: 0.5 }}
-            />
-          </Stack>
-          {prices.length > 0 && (
-            <Typography variant="caption" color="text.secondary">
-              Showing {prices.map((p) => (p === UNKNOWN_PRICE ? 'unknown-price' : `$${p}`)).join(', ')} games, set by the Ticket price filter.
-            </Typography>
-          )}
-        </Stack>
-        <Divider />
-        <List dense disablePadding sx={{ overflowY: 'auto', flex: 1, minHeight: 120 }}>
-          {total === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>No games match.</Typography>
-          )}
-          {groups.map((gr) => (
-            <li key={gr.key}>
-              <ul style={{ padding: 0 }}>
-                {gr.label && (
-                  <ListSubheader sx={{ lineHeight: '32px', fontSize: 12, fontWeight: 600, bgcolor: 'background.paper' }}>
-                    {gr.label}
-                  </ListSubheader>
-                )}
-                {gr.games.map((g) => (
-                  <GameRow key={g.id} g={g} checked={selected.has(g.id)} claims={claimCounts.get(g.id) ?? 0} onToggle={() => toggle(g.id)} />
-                ))}
-              </ul>
-            </li>
-          ))}
-        </List>
-        <Divider />
-        <Stack spacing={1} sx={{ p: 1.5 }}>
-          <CaveatNote dense>
-            {CAVEATS.unclaimedPrizes}{asOf ? ` Prize table as of ${fmtDate(asOf)}.` : ''} “—” means no prize table for that game.
-          </CaveatNote>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-              {value.length ? `${value.length} selected` : 'No game selected: the map shows all games'} · {total} shown
-            </Typography>
-            <Button size="small" disabled={!shownIds.length} onClick={() => onChange([...new Set([...value, ...shownIds])])}>
-              Select shown
-            </Button>
-            <Button size="small" disabled={!value.length} onClick={() => onChange([])}>Clear</Button>
-            <Button size="small" variant="contained" onClick={() => setAnchor(null)}>Done</Button>
-          </Stack>
-        </Stack>
-      </Popover>
-    </>
+          </AriaDialog>
+        </AriaPopover>
+      </AriaDialogTrigger>
+    </div>
   );
 }
