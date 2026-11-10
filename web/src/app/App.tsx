@@ -49,7 +49,10 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
             onFilterMap={local ? undefined : (id) => setMapGame(id)} />
         )}
         {tab === 'ev' && <EvPage games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} />}
-        {tab === 'stats' && <StatsPage stats={S.statResults} />}
+        {tab === 'stats' && (
+          <StatsPage stats={S.statResults}
+            schedule={local ? { claims: local.claims, source: `real, ${local.coverage.label}` } : { claims: S.claims, source: 'sample data' }} />
+        )}
         {tab === 'model' && <ModelPage gate={S.mlGate} />}
         {tab === 'data' && <DataPage sources={S.sources} online={online} onToggleOnline={setOnline} coverage={S.coverage} />}
       </AppShell>

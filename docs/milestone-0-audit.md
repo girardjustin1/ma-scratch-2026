@@ -101,7 +101,7 @@ Also in the claims data:
 
 **Statistics**
 
-13. **The weekday test needs rewording or removal.** Scratch rows by weekday (Sun → Sat):
+13. **The weekday test was replaced** (owner decision, 2026-11-10) by a descriptive listing-schedule chart. Scratch rows by weekday (Sun → Sat):
     13,352 / 86,460 / 69,175 / 59,195 / 59,085 / 70,009 / 14,603. The weekend share is capped by
     the $5,000 mobile-cashing limit. This is office processing, not play.
 
@@ -130,6 +130,5 @@ Also in the claims data:
 
 ## Decisions needed
 
-- Whether to replace the weekday test (13) with a descriptive "listing schedule" chart.
 - Whether to sweep retailers statewide (about 300–800 locator calls) to unlock tract-level
   claims beyond the pin area.

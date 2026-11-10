@@ -34,7 +34,7 @@ export const Games: StoryObj = {
   render: () => <Frame><GamesPage games={S.games} tiers={S.prizeTiers} claims={S.claims} coverage={S.coverage} asOf={S.AS_OF} /></Frame>,
 };
 export const EV: StoryObj = { render: () => <Frame><EvPage games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} /></Frame> };
-export const Statistics: StoryObj = { render: () => <Frame><StatsPage stats={S.statResults} /></Frame> };
+export const Statistics: StoryObj = { render: () => <Frame><StatsPage stats={S.statResults} schedule={{ claims: S.claims, source: 'sample data' }} /></Frame> };
 export const Model: StoryObj = { render: () => <Frame><ModelPage gate={S.mlGate} /></Frame> };
 export const Data: StoryObj = {
   render: () => <Frame><DataPage sources={S.sources} online={false} onToggleOnline={() => {}} coverage={S.coverage} /></Frame>,

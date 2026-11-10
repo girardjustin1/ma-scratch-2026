@@ -13,6 +13,7 @@ import { WinnerTimeline } from '../components/WinnerTimeline';
 import { EvPanel } from '../components/EvPanel';
 import { MlGatePanel, StatCard } from '../components/Analysis';
 import { SourcesPanel } from '../components/SourcesPanel';
+import { ListingSchedule } from '../components/ListingSchedule';
 import { CAVEATS } from '../lib/copy';
 import { addDays } from '../lib/format';
 import type { Filters, MetricKey } from '../domain/types';
@@ -144,6 +145,7 @@ export const ExpectedValue: Story = {
 
 export const StatResultCard: Story = { name: 'Stat card · result', render: () => <Box sx={{ maxWidth: 560 }}><StatCard stat={S.statResults[0]} /></Box> };
 export const StatGated: Story = { name: 'Stat card · insufficient sample', render: () => <Box sx={{ maxWidth: 560 }}><StatCard stat={S.statResults[2]} /></Box> };
+export const Schedule: Story = { name: 'Listing schedule (no test)', render: () => <Box sx={{ maxWidth: 600 }}><ListingSchedule claims={S.claims} source="sample data" /></Box> };
 export const ModelGate: Story = { name: 'Model · below gate', render: () => <MlGatePanel gate={S.mlGate} /> };
 
 export const Sources: Story = {

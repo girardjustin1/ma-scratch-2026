@@ -82,7 +82,9 @@ vintages, not a year-over-year change. Tract boundary vintage must match the inc
    total); net EV = Σ remaining_i × value_i / tickets remaining − price; ex-jackpot drops the
    launch top tier. Legacy column untouched. Positive EV flagged "check inputs".
 5. **Statistics**: income vs claims (30 covered tracts), income vs claims per retailer (30),
-   weekday pattern (8 weeks), game differences (2+ games with 30+ claims). n, effect size with
+   game differences (2+ games with 30+ claims). The weekday test was replaced (owner decision,
+   2026-11-10) by a descriptive "Lottery listing schedule" chart with no test: listed dates follow
+   claim processing, so a weekday test would measure the office schedule, not play. n, effect size with
    95% interval, raw p, BH-adjusted p. Spatial checks (Moran's I, block bootstrap, radius
    reruns, leave-one-town-out), income redraw from MOE. "Associated with", never "causes".
 6. **Exploratory ML**: tract-week counts, place features only, time-ordered and

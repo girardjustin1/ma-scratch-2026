@@ -25,7 +25,7 @@ function GateBar({ label, required, have }: { label: string; required: number; h
 const p = (x: number) => (x < 0.001 ? '< 0.001' : x.toFixed(3));
 
 /** One statistical question: a result above its sample gate, otherwise why not. */
-export function StatCard({ stat }: { stat: StatResult }) {
+export function StatCard({ stat, sample }: { stat: StatResult; sample?: boolean }) {
   const met = stat.gate.have >= stat.gate.required && !!stat.result;
   return (
     <Paper sx={{ p: 2, height: '100%' }}>
@@ -34,11 +34,14 @@ export function StatCard({ stat }: { stat: StatResult }) {
           <Typography variant="h3">{stat.question}</Typography>
           <Typography variant="caption">Unit: {stat.unit}</Typography>
         </Box>
+        <Stack direction="row" spacing={0.75}>
+        {sample && <Chip size="small" label="Sample" sx={{ fontWeight: 700 }} />}
         <Chip
           size="small" variant="outlined" color={met ? 'success' : 'warning'}
           icon={met ? <CheckCircleOutlineIcon /> : <HourglassEmptyIcon />}
           label={met ? 'Result' : 'Insufficient sample'}
         />
+        </Stack>
       </Stack>
       {met && stat.result ? (
         <Box sx={{ mt: 2 }}>

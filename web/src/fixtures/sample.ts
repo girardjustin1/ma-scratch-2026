@@ -173,13 +173,6 @@ export const statResults: StatResult[] = [
     },
   },
   {
-    id: 'weekday',
-    question: 'Weekday pattern',
-    unit: 'Listed date',
-    method: 'Chi-square vs equal rates, adjusted for weekday frequency in the window',
-    gate: { label: 'weeks of listed dates', required: 8, have: 3 },
-  },
-  {
     id: 'games',
     question: 'Differences between games',
     unit: 'Game',

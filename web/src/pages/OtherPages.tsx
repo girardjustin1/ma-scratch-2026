@@ -7,6 +7,7 @@ import { EvPanel } from '../components/EvPanel';
 import { MlGatePanel, StatCard, type MlGate } from '../components/Analysis';
 import { SourcesPanel, type SourceRow } from '../components/SourcesPanel';
 import { CaveatNote } from '../components/Basics';
+import { ListingSchedule } from '../components/ListingSchedule';
 import { CAVEATS } from '../lib/copy';
 import { addDays, fmtDate } from '../lib/format';
 
@@ -41,7 +42,9 @@ export function EvPage(props: { games: Game[]; tiers: PrizeTier[]; legacy: Legac
   return <Page><EvPanel {...props} /></Page>;
 }
 
-export function StatsPage({ stats }: { stats: StatResult[] }) {
+export function StatsPage({ stats, schedule, sampleStats = true }: {
+  stats: StatResult[]; schedule: { claims: Claim[]; source: string }; sampleStats?: boolean;
+}) {
   return (
     <Page>
       <Box>
@@ -51,7 +54,8 @@ export function StatsPage({ stats }: { stats: StatResult[] }) {
         </Typography>
       </Box>
       <Grid container spacing={2}>
-        {stats.map((s) => <Grid key={s.id} size={{ xs: 12, md: 6 }}><StatCard stat={s} /></Grid>)}
+        {stats.map((s) => <Grid key={s.id} size={{ xs: 12, md: 6 }}><StatCard stat={s} sample={sampleStats} /></Grid>)}
+        <Grid size={{ xs: 12, md: 6 }}><ListingSchedule claims={schedule.claims} source={schedule.source} /></Grid>
       </Grid>
       <CaveatNote>{CAVEATS.association} {CAVEATS.ecological} Spatial checks (Moran's I, block bootstrap, radius reruns, leave-one-town-out) appear with each result once real data is loaded.</CaveatNote>
     </Page>
