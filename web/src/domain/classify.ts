@@ -30,6 +30,16 @@ export function claimCountBreaks(values: number[]): number[] {
 }
 
 /**
+ * Breaks for listed claims per store (stores with at least one). Same idea as
+ * claimCountBreaks: when quantiles collapse, fixed classes 1 · 2 · 3–4 · 5–9 · 10+.
+ */
+export function storeCountBreaks(values: number[]): number[] {
+  const q = countBreaks(values, 5);
+  const max = values.length ? Math.max(...values) : 0;
+  return q.length >= 4 || max < 10 ? q : [1, 2, 4, 9];
+}
+
+/**
  * Legend label per class. Counts read "3 – 7" with no overlap between classes; with
  * openTop the last class reads "10+" instead of running to the current maximum.
  */

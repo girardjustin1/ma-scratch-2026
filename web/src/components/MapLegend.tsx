@@ -111,11 +111,14 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
 function BubbleKey({ breaks, min, max, stores }: { breaks: number[]; min: number; max: number; stores: number }) {
   const mode = useMode();
   const t = bubbleTokens[mode];
-  const labels = classLabels(breaks, min, max, true, (v) => fmtInt(Math.round(v)));
+  const labels = classLabels(breaks, min, max, true, (v) => fmtInt(Math.round(v)), true);
+  const top = labels.length - 1;
   return (
     <div className="mt-3 border-t border-secondary pt-3">
       <p className="text-sm font-semibold text-primary">Stores · listed claims</p>
-      <p className="mb-2 text-xs text-tertiary tabular">Quantile classes · {fmtInt(stores)} stores with listed claims in radius</p>
+      <p className="mb-2 text-xs text-tertiary tabular">
+        {breaks.join() === '1,2,4,9' ? 'Fixed classes' : 'Quantile classes'} · {fmtInt(stores)} stores with listed claims in radius
+      </p>
       <ul className="flex flex-col gap-1">
         {labels.map((label, i) => (
           <li key={label} className="flex items-center gap-2">
@@ -125,7 +128,9 @@ function BubbleKey({ breaks, min, max, stores }: { breaks: number[]; min: number
                 style={{ width: bubbleRadii[i] * 2, height: bubbleRadii[i] * 2, backgroundColor: t.ramp[i], boxShadow: `0 0 0 1px ${t.stroke}` }}
               />
             </span>
-            <span className="text-sm text-secondary tabular">{label}</span>
+            <span className="text-sm text-secondary tabular">
+              {label}{i === top && top === 4 && <span className="font-semibold text-primary"> · Top stores</span>}
+            </span>
           </li>
         ))}
         <li className="flex items-center gap-2">

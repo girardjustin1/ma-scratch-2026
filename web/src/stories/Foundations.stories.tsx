@@ -190,10 +190,10 @@ export const MapColors: StoryObj = {
         </Row>
         <Row
           title="Retailer bubbles · listed claims per store"
-          note="Single purple hue, fewest lightest. Stores are colored by their own count; groups (zoomed out) by their average per store."
+          note="Purple, fewest lightest, with the top class in green so the busiest stores stand out. Stores are colored by their own count; groups (zoomed out) by their average per store."
         >
           {bubbles[mode].ramp.map((x, i) => (
-            <Swatch key={x} fill={x} label={i === 0 ? 'Class 1 · fewest' : i === 4 ? 'Class 5 · most' : `Class ${i + 1}`} />
+            <Swatch key={x} fill={x} label={i === 0 ? 'Class 1 · fewest' : i === 4 ? 'Class 5 · top stores' : `Class ${i + 1}`} />
           ))}
         </Row>
         <Row title="No data, hollow stores and pin">

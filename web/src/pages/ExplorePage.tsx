@@ -3,7 +3,7 @@ import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { distance, point } from '@turf/turf';
-import { claimCountBreaks, countBreaks, quantileBreaks } from '../domain/classify';
+import { claimCountBreaks, quantileBreaks, storeCountBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
   Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
@@ -71,7 +71,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
     );
     const storeCounts = [...storesInRadius].map((id) => claimsByRetailer.get(id) ?? 0).filter((n) => n > 0);
     const bubbleScale = {
-      breaks: countBreaks(storeCounts, 5),
+      breaks: storeCountBreaks(storeCounts),
       min: storeCounts.length ? Math.min(...storeCounts) : 0,
       max: storeCounts.length ? Math.max(...storeCounts) : 0,
       stores: storeCounts.length,

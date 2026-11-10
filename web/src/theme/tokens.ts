@@ -62,10 +62,13 @@ export const noData = {
  * one hue, monotone lightness, visible steps, light end clears 2:1. Groups of stores
  * (clusters, zoomed out) use the same ramp on their average per store, so a color always
  * means the same thing. `hollow` = a licensed store with no listed claims.
+ * The top class is green, not the deepest purple (owner's call, 2026-11-10), so the busiest
+ * stores pop out; validated against the class-4 purple (deutan ΔE 24+, normal 30+) and
+ * the map backgrounds (>= 3:1) in both modes.
  */
 export const bubbles = {
-  light: { ramp: ['#a08fec', '#8169e2', '#6750d4', '#4c36ad', '#30207a'], stroke: '#ffffff', hollow: '#52514e' },
-  dark: { ramp: ['#d4ccfa', '#b3a5f4', '#9180ea', '#7059dc', '#5541c4'], stroke: '#1a1a19', hollow: '#c3c2b7' },
+  light: { ramp: ['#a08fec', '#8169e2', '#6750d4', '#4c36ad', '#17834a'], stroke: '#ffffff', hollow: '#52514e' },
+  dark: { ramp: ['#d4ccfa', '#b3a5f4', '#9180ea', '#7059dc', '#22a05c'], stroke: '#1a1a19', hollow: '#c3c2b7' },
 } as const;
 
 /**
