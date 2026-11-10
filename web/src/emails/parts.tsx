@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Body, Container, Head, Html, Link, Preview, Section, Text } from '@react-email/components';
+import { Body, Container, Head, Html, Img, Link, Preview, Section, Text } from '@react-email/components';
 
 /**
  * Shared parts for the insights emails (React Email, sent with Resend). Email clients
@@ -207,3 +207,53 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
 export const P = ({ children, muted }: { children: ReactNode; muted?: boolean }) => (
   <Text style={text(muted ? 12 : 14, muted ? t.muted : t.secondary, { marginBottom: 8 })}>{children}</Text>
 );
+
+/** Ticket art at 2:1, or a gray tile showing the price when there is no image. */
+export function TicketArt({ src, price, width = 88, alt }: { src?: string; price: number | null; width?: number; alt: string }) {
+  const height = Math.round(width / 2);
+  return src
+    ? <Img src={src} alt={alt} width={width} height={height} style={{ display: 'block', borderRadius: 6, border: `1px solid ${t.line}` }} />
+    : (
+      <div style={{ width, height, borderRadius: 6, backgroundColor: t.panel, border: `1px solid ${t.line}`, textAlign: 'center', lineHeight: `${height}px`, fontSize: Math.round(width / 6), fontWeight: 600, color: t.muted }}>
+        {price != null ? `$${price}` : '—'}
+      </div>
+    );
+}
+
+/** One listed claim: ticket art, game and store, prize. Used by the digests and the nearby alert. */
+export function ClaimRow({ art, main, sub, right, rightSub, first }: {
+  art: ReactNode; main: ReactNode; sub: ReactNode; right: ReactNode; rightSub?: ReactNode; first?: boolean;
+}) {
+  return (
+    <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} style={{ borderTop: first ? undefined : `1px solid ${t.line}` }}>
+      <tbody>
+        <tr>
+          <td width={88} style={{ padding: '10px 12px 10px 0', verticalAlign: 'top' }}>{art}</td>
+          <td style={{ padding: '10px 12px 10px 0', verticalAlign: 'top' }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: t.ink, lineHeight: 1.35 }}>{main}</div>
+            <div style={{ fontSize: 12, color: t.muted, lineHeight: 1.4 }}>{sub}</div>
+          </td>
+          <td align="right" style={{ padding: '10px 0', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: t.ink }}>{right}</div>
+            {rightSub && <div style={{ fontSize: 12, color: t.muted }}>{rightSub}</div>}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+/** Quiet inline link: ink text, thin underline (monochrome; no blue). */
+export function A({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) return <>{children}</>;
+  return <Link href={href} style={{ color: 'inherit', textDecoration: 'underline', textDecorationColor: '#a3a3a3', textUnderlineOffset: 2 }}>{children}</Link>;
+}
+
+/** Small "Label ↗" link for secondary actions such as Map or Game page. */
+export function SmallLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} style={{ fontSize: 12, fontWeight: 600, color: t.secondary, textDecoration: 'underline', textDecorationColor: '#a3a3a3', textUnderlineOffset: 2, marginRight: 12, whiteSpace: 'nowrap' }}>
+      {children} ↗
+    </Link>
+  );
+}

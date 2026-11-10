@@ -2,7 +2,7 @@
 // are made up; none of it describes real Lottery activity. Real emails are built from the
 // local data on the owner's computer and are never committed.
 
-import type { EvWatchData, FeaturedTicketsData, WeeklyInsightsData } from './types';
+import type { EvSummary, EvWatchData, FeaturedTicketsData, InsightsData, NearbyAlertData } from './types';
 
 const base = { appUrl: 'http://127.0.0.1:5180', area: '5 mi around your pin' };
 
@@ -12,9 +12,9 @@ const art = (label: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="264" height="132"><rect width="264" height="132" fill="#e5e5e5"/><rect x="8" y="8" width="248" height="116" fill="none" stroke="#a3a3a3" stroke-dasharray="6 5"/><text x="132" y="74" font-family="Helvetica,Arial,sans-serif" font-size="22" font-weight="700" fill="#525252" text-anchor="middle">${label}</text></svg>`,
   )}`;
 
-export const weekly: WeeklyInsightsData = {
+export const weekly: InsightsData = {
   ...base,
-  weekFrom: '2026-11-02', weekTo: '2026-11-08',
+  period: 'week', from: '2026-11-02', to: '2026-11-08',
   alerts: [
     { kind: 'big_claim', prize: 100000, game: 'Maple Millions', store: 'Sample Variety 12', town: 'Everett', listedDate: '2026-11-05' },
     { kind: 'last_top_prize', game: 'Lighthouse Loot', price: 10, topPrize: 1000000, left: 1, total: 4 },
@@ -39,11 +39,13 @@ export const weekly: WeeklyInsightsData = {
     ],
   },
   largest: [
-    { listedDate: '2026-11-05', game: 'Maple Millions', price: 30, prize: 100000, store: 'Sample Variety 12', town: 'Everett' },
-    { listedDate: '2026-11-06', game: 'Granite Gold', price: 10, prize: 20000, store: 'Demo Market 7', town: 'Revere' },
-    { listedDate: '2026-11-03', game: 'Cash Orchard', price: 5, prize: 10000, store: 'Test Liquors 4', town: 'Chelsea' },
+    { listedDate: '2026-11-05', game: 'Maple Millions', price: 30, prize: 100000, store: 'Sample Variety 12', town: 'Everett', image: art('MAPLE MILLIONS') },
+    { listedDate: '2026-11-06', game: 'Granite Gold', price: 10, prize: 20000, store: 'Demo Market 7', town: 'Revere', image: art('GRANITE GOLD') },
+    { listedDate: '2026-11-03', game: 'Cash Orchard', price: 5, prize: 10000, store: 'Test Liquors 4', town: 'Chelsea', image: art('CASH ORCHARD') },
     { listedDate: '2026-11-04', game: 'Harbor Riches', price: 20, prize: 5000, store: 'Sample Smoke Shop 2', town: 'Everett' },
   ],
+  featured: [],
+  ev: undefined,
   analysis: [
     { title: 'Listed claims are up 14% on the week before', body: '187 this week against 164. The four weeks before averaged 171, so this is within the usual range.' },
     { title: '$30 and $50 tickets made up 41% of listed claims', body: 'Up from 33% over the last 12 months. Higher-priced tickets have more prizes over $600, so they show up more often on the public list.' },
@@ -51,9 +53,9 @@ export const weekly: WeeklyInsightsData = {
   ],
 };
 
-export const weeklyQuiet: WeeklyInsightsData = {
+export const weeklyQuiet: InsightsData = {
   ...base,
-  weekFrom: '2026-11-02', weekTo: '2026-11-08',
+  period: 'week', from: '2026-11-02', to: '2026-11-08',
   alerts: [],
   totals: { claims: 3, priorClaims: 0, prizeTotal: 3000, storesWithClaims: 3, licensedStores: 18 },
   trend: { ...weekly.trend, stores: [] },
@@ -62,6 +64,7 @@ export const weeklyQuiet: WeeklyInsightsData = {
     { listedDate: '2026-11-06', game: 'Cash Orchard', price: null, prize: 1000, store: 'Demo Market 7', town: 'Revere' },
   ],
   analysis: [],
+  featured: [],
 };
 
 export const featured: FeaturedTicketsData = {
@@ -121,3 +124,57 @@ export const evWatchNone: EvWatchData = {
   best: evWatch.best.filter((r) => !r.checkInputs),
   movers: [],
 };
+
+const evSummary: EvSummary = {
+  asOf: '2026-11-10', gamesOnSale: 134, medianPayback: 0.76, positive: 3, holdsUp: 1,
+  best: evWatch.best.slice(0, 4),
+};
+
+// The weekly digest carries two featured tickets and a one-line +EV note.
+weekly.featured = featured.tickets.slice(0, 2);
+weekly.ev = evSummary;
+
+export const monthly: InsightsData = {
+  ...weekly,
+  period: 'month', from: '2026-10-01', to: '2026-10-31',
+  alerts: [
+    { kind: 'big_claim', prize: 1000000, game: 'Lifetime Gold', store: 'Demo Variety 9', town: 'Somerville', listedDate: '2026-10-14' },
+    weekly.alerts[1],
+    { kind: 'new_game', game: 'Winter Wonders', price: 5, topPrize: 100000, launchDate: '2026-10-20' },
+    { kind: 'store_trending', store: 'Demo Market 7', town: 'Revere', recent: 17, prior: 4 },
+  ],
+  totals: { claims: 742, priorClaims: 801, prizeTotal: 2915000, storesWithClaims: 211, licensedStores: 512 },
+  hottest: { ...weekly.hottest, period: 'October 2026' },
+  largest: [
+    { listedDate: '2026-10-14', game: 'Lifetime Gold', price: 50, prize: 1000000, store: 'Demo Variety 9', town: 'Somerville', image: art('LIFETIME GOLD') },
+    // Same sample stores and games as the weekly, moved into October.
+    ...weekly.largest.map((c, i) => ({ ...c, listedDate: ['2026-10-22', '2026-10-09', '2026-10-27', '2026-10-03'][i] ?? c.listedDate })),
+  ],
+  topGames: [
+    { name: 'Maple Millions', price: 30, image: art('MAPLE MILLIONS'), claims: 61, prizeTotal: 183000 },
+    { name: 'Granite Gold', price: 10, image: art('GRANITE GOLD'), claims: 48, prizeTotal: 62000 },
+    { name: 'Cash Orchard', price: 5, image: art('CASH ORCHARD'), claims: 37, prizeTotal: 41000 },
+    { name: 'Harbor Riches', price: 20, claims: 33, prizeTotal: 70500 },
+  ],
+  analysis: [
+    { title: 'Listed claims fell 7% on September', body: '742 in October against 801. October has been the quietest month of the fall in each of the last three years.' },
+    ...weekly.analysis.slice(1),
+  ],
+  trend: { ...weekly.trend, recentFrom: '2026-05-01', recentTo: '2026-10-31', priorFrom: '2025-11-01', priorTo: '2026-04-30' },
+  featured: featured.tickets,
+  ev: evSummary,
+};
+
+export const nearby: NearbyAlertData = {
+  ...base,
+  radiusMiles: 3, from: '2026-11-02', to: '2026-11-08',
+  claims: [
+    { listedDate: '2026-11-07', game: 'Granite Gold', price: 10, prize: 2000, store: 'Demo Market 7', address: '100 SAMPLE ST', town: 'Everett', miles: 0.4, image: art('GRANITE GOLD') },
+    { listedDate: '2026-11-05', game: 'Maple Millions', price: 30, prize: 100000, store: 'Sample Variety 12', address: '22 EXAMPLE AVE', town: 'Everett', miles: 0.9, image: art('MAPLE MILLIONS') },
+    { listedDate: '2026-11-06', game: 'Cash Orchard', price: 5, prize: 1000, store: 'Test Liquors 4', address: '7 DEMO RD', town: 'Malden', miles: 1.6, image: art('CASH ORCHARD') },
+    { listedDate: '2026-11-04', game: 'Harbor Riches', price: 20, prize: 5000, store: 'Sample Smoke Shop 2', address: '310 PLACEHOLDER WAY', town: 'Chelsea', miles: 2.7 },
+  ],
+};
+
+export const nearbyOne: NearbyAlertData = { ...nearby, radiusMiles: 1, claims: nearby.claims.slice(1, 2) };
+export const nearbyNone: NearbyAlertData = { ...nearby, radiusMiles: 2, claims: [] };

@@ -1,7 +1,8 @@
 import { Img } from '@react-email/components';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
-import { Block, Callout, Shell, Tag, t } from './parts';
+import { A, Block, Callout, Shell, SmallLink, Tag, t } from './parts';
+import { lotteryGameUrl } from './links';
 import type { FeaturedTicket, FeaturedTicketsData } from './types';
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -17,7 +18,8 @@ function Cell({ label, value, sub }: { label: string; value: React.ReactNode; su
   );
 }
 
-function Ticket({ k }: { k: FeaturedTicket }) {
+/** One featured ticket: art, why it was picked, prizes left, estimated payback, nearby claims. */
+export function FeaturedCard({ k }: { k: FeaturedTicket }) {
   return (
     <div style={{ border: `1px solid ${t.line}`, borderRadius: 10, padding: 16, marginBottom: 12 }}>
       <table role="presentation" width="100%" cellPadding={0} cellSpacing={0}>
@@ -29,7 +31,7 @@ function Ticket({ k }: { k: FeaturedTicket }) {
                 : <div style={{ width: 132, height: 66, borderRadius: 6, backgroundColor: t.panel, border: `1px solid ${t.line}`, textAlign: 'center', lineHeight: '66px', fontSize: 18, fontWeight: 600, color: t.muted }}>${k.price}</div>}
             </td>
             <td style={{ verticalAlign: 'top' }}>
-              <div style={{ fontSize: 16, fontWeight: 600, color: t.ink, lineHeight: 1.3 }}>{k.name}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: t.ink, lineHeight: 1.3 }}><A href={k.gameId && lotteryGameUrl(k.gameId)}>{k.name}</A></div>
               <div style={{ fontSize: 12, color: t.muted, marginTop: 2 }}>
                 ${k.price} ticket · launched {fmtDate(k.launchDate)} · top prize {fmtCompactUsd(k.topPrize)}
               </div>
@@ -43,6 +45,11 @@ function Ticket({ k }: { k: FeaturedTicket }) {
         </tbody>
       </table>
       <p style={{ margin: '12px 0 4px', fontSize: 14, lineHeight: 1.45, color: t.secondary }}><b style={{ color: t.ink }}>Why it’s here:</b> {k.why}</p>
+      {k.gameId && (
+        <div style={{ margin: '2px 0 4px' }}>
+          <SmallLink href={lotteryGameUrl(k.gameId)}>Game page, prizes left and odds</SmallLink>
+        </div>
+      )}
       <table role="presentation" width="100%" cellPadding={0} cellSpacing={0}>
         <tbody>
           <tr>
@@ -78,7 +85,7 @@ export function FeaturedTicketsEmail(d: FeaturedTicketsData) {
       <Block title={`${d.tickets.length} featured`} note="Picked by rule: most prizes left, newest, ending soon with top prizes out, and highest estimated payback.">
         {d.tickets.length === 0
           ? <Callout title="Nothing stood out this week">No game met a featuring rule. The full list is in the explorer.</Callout>
-          : d.tickets.map((k) => <Ticket key={k.name} k={k} />)}
+          : d.tickets.map((k) => <FeaturedCard key={k.name} k={k} />)}
       </Block>
     </Shell>
   );

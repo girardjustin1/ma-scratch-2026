@@ -4,6 +4,7 @@ import * as S from '../fixtures/sample';
 import { AppShell, type TabKey } from './AppShell';
 import { ExplorePage } from '../pages/ExplorePage';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
+import { EmailsPage } from '../pages/EmailsPage';
 import type { ExploreData } from '../pages/ExplorePage';
 import type { Filters } from '../domain/types';
 import { loadLocalView } from '../data/localView';
@@ -55,6 +56,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         )}
         {tab === 'model' && <ModelPage gate={S.mlGate} />}
         {tab === 'data' && <DataPage sources={S.sources} online={online} onToggleOnline={setOnline} coverage={S.coverage} />}
+        {tab === 'emails' && <EmailsPage data={local} />}
       </AppShell>
     </ModeProvider>
   );

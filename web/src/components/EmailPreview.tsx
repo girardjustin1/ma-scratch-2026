@@ -4,11 +4,14 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 
 type View = 'desktop' | 'mobile' | 'text';
 
+const SAMPLE_EMAIL_NOTE = 'Sample data. Rendered with React Email, exactly as Resend would send it.';
+
 /**
- * Storybook-only preview of an email: renders it to the HTML that would be sent, shows it
- * in a frame at desktop or phone width, and offers the plain-text version.
+ * Preview of an email (Storybook and the prototype's Emails tab): renders it to the HTML
+ * that would be sent, shows it in a frame at desktop or phone width, and offers the
+ * plain-text version. `note` says where the data comes from.
  */
-export function EmailPreview({ subject, email }: { subject: string; email: ReactElement }) {
+export function EmailPreview({ subject, email, note = SAMPLE_EMAIL_NOTE }: { subject: string; email: ReactElement; note?: string }) {
   const [view, setView] = useState<View>('desktop');
   const [html, setHtml] = useState('');
   const [plain, setPlain] = useState('');
@@ -28,6 +31,13 @@ export function EmailPreview({ subject, email }: { subject: string; email: React
     const doc = frame.current?.contentDocument;
     if (doc) setHeight(doc.documentElement.scrollHeight);
   };
+  // Switching between desktop and phone width reflows the email without reloading the frame,
+  // so onLoad does not fire: measure again once the new width has applied.
+  useEffect(() => {
+    if (view === 'text') return;
+    const id = window.setTimeout(fit, 60);
+    return () => window.clearTimeout(id);
+  }, [view]);
   const preview = html.match(/data-skip-in-text="true">([^<]*)/)?.[1]?.replace(/[‌​ ﻿͏­\s]+$/u, '').trim();
 
   return (
@@ -39,7 +49,7 @@ export function EmailPreview({ subject, email }: { subject: string; email: React
           <ButtonGroupItem id="mobile" className="selected:bg-tertiary selected:text-primary">Phone</ButtonGroupItem>
           <ButtonGroupItem id="text" className="selected:bg-tertiary selected:text-primary">Plain text</ButtonGroupItem>
         </ButtonGroup>
-        <p className="text-xs text-tertiary">Sample data. Rendered with React Email, exactly as Resend would send it.</p>
+        <p className="text-xs text-tertiary">{note}</p>
       </div>
       <div className="rounded-xl bg-primary px-4 py-3 ring-1 ring-secondary ring-inset">
         <p className="text-xs text-tertiary">From <span className="font-medium text-secondary">MA Scratch Claims</span></p>

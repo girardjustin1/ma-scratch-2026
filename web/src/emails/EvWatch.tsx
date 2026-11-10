@@ -1,11 +1,14 @@
 import { CAVEATS } from '../lib/copy';
 import { fmtDate, fmtInt, fmtSignedUsdCents } from '../lib/format';
-import { Block, Callout, DataTable, P, Shell, Stack, Tag, Tiles, t } from './parts';
+import { A, Block, Callout, DataTable, P, Shell, Stack, Tag, Tiles, t } from './parts';
+import { lotteryGameUrl } from './links';
 import type { EvRow, EvWatchData } from './types';
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-const game = (r: EvRow) => <Stack main={r.name} sub={`$${r.price} ticket · ${fmtSignedUsdCents(r.evAll)} per ticket`} />;
+const game = (r: EvRow) => (
+  <Stack main={<A href={r.gameId && lotteryGameUrl(r.gameId)}>{r.name}</A>} sub={`$${r.price} ticket · ${fmtSignedUsdCents(r.evAll)} per ticket`} />
+);
 
 export const evSubject = (d: EvWatchData) =>
   `+EV watch: ${d.positive.length} estimate${d.positive.length === 1 ? '' : 's'} above 100%, typical payback ${pct(d.medianPayback)}`;
@@ -61,7 +64,7 @@ export function EvWatchEmail(d: EvWatchData) {
         <DataTable
           columns={[{ label: 'Game' }, { label: 'Payback', align: 'right' }, { label: 'Excl. jackpot', align: 'right' }]}
           rows={jackpotOnly.map((r) => [
-            <><Stack main={r.name} sub={`$${r.price} ticket · ${r.why}`} /></>,
+            <><Stack main={<A href={r.gameId && lotteryGameUrl(r.gameId)}>{r.name}</A>} sub={`$${r.price} ticket · ${r.why}`} /></>,
             <><b>{pct(r.payback)}</b><div style={{ marginTop: 2 }}><Tag>Check inputs</Tag></div></>,
             pct(r.paybackExJackpot),
           ])}
