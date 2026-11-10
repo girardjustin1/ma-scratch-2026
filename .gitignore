@@ -1,0 +1,22 @@
+# Data never goes to the public repo
+data/
+*.parquet
+*.duckdb
+*.duckdb.wal
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node / Python
+node_modules/
+dist/
+storybook-static/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.log
