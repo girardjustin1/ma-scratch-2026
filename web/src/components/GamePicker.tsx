@@ -215,10 +215,10 @@ function Metric({ value, label, muted }: { value: string; label: string; muted?:
 }
 
 /** Ticket art at 2:1, or a gray placeholder with a ticket icon when there is none. */
-function TicketThumb({ src }: { src?: string | null }) {
+export function TicketThumb({ src, className }: { src?: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   return (
-    <span className="grid h-9 w-[72px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset">
+    <span className={cx('grid h-9 w-[72px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset', className)}>
       {src && !failed
         ? <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
         : <Ticket01 className="size-4 text-fg-quaternary" aria-hidden />}

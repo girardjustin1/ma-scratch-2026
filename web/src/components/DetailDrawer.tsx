@@ -12,6 +12,7 @@ import { CAVEATS, LABELS } from '../lib/copy';
 import { addDays, fmtDate, fmtInt, fmtUsd } from '../lib/format';
 import { CaveatNote, IncomeValue, Stat } from './Basics';
 import { Chip } from './Chip';
+import { TicketThumb } from './GamePicker';
 import { RECENT_DAYS, type PanelTab } from './SelectionCard';
 
 export type PanelContext =
@@ -190,6 +191,7 @@ function GamesTab({ claims, games, onPick }: { claims: Claim[]; games: Map<strin
       <Table aria-label="Games with listed claims here" size="sm" onRowAction={(k) => onPick(String(k))}>
         <Table.Header className="h-auto bg-transparent">
           <Table.Head id="game" label="Game" isRowHeader className={HEAD} />
+          <Table.Head id="price" label="Price" className={`${HEAD} ${RIGHT}`} />
           <Table.Head id="n" label="Listed" className={`${HEAD} ${RIGHT}`} />
           <Table.Head id="max" label="Largest" className={`${HEAD} ${RIGHT}`} />
           <Table.Head id="latest" label="Latest listed" className={HEAD} />
@@ -199,10 +201,13 @@ function GamesTab({ claims, games, onPick }: { claims: Claim[]; games: Map<strin
             const g = games.get(r.id);
             return (
               <Table.Row key={r.id} id={r.id} className="h-auto cursor-pointer">
-                <Table.Cell className={`${CELL} [overflow-wrap:anywhere]`}>
-                  <span className="text-primary">{g?.name}</span>
-                  <span className="block text-xs text-tertiary">{g?.price != null ? `$${g.price}` : 'Price unknown'}</span>
+                <Table.Cell className={CELL}>
+                  <div className="flex items-center gap-2.5">
+                    <TicketThumb src={g?.image} className="h-7 w-14" />
+                    <span className="min-w-0 text-primary [overflow-wrap:anywhere]">{g?.name}</span>
+                  </div>
                 </Table.Cell>
+                <Table.Cell className={`${CELL} text-right font-medium text-primary tabular`}>{g?.price != null ? `$${g.price}` : '—'}</Table.Cell>
                 <Table.Cell className={`${CELL} text-right font-medium text-primary tabular`}>{fmtInt(r.n)}</Table.Cell>
                 <Table.Cell className={`${CELL} text-right tabular`}>{fmtUsd(r.max)}</Table.Cell>
                 <Table.Cell className={`${CELL} whitespace-nowrap tabular`}>{fmtDate(r.latest)}</Table.Cell>
