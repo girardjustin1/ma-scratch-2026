@@ -9,12 +9,9 @@ import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
 import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode } from '../theme/tokens';
-import { fmtInt } from '../lib/format';
-import { Card } from '../components/Basics';
 import { StorePin } from './StorePin';
 import { STORE_CLAIMS_MAX } from '../components/Controls';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
-import { TractTooltip } from '../components/TractTooltip';
 
 export interface ClaimsMapProps {
   tracts: TractCollection;
@@ -101,8 +98,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     height = '100%',
   } = props;
   const mode = useMode();
-  const [hover, setHover] = useState<{ x: number; y: number; geoid: string } | null>(null);
-  const [groupHover, setGroupHover] = useState<{ x: number; y: number; stores: number; n: number } | null>(null);
+  const [cursor, setCursor] = useState('grab');
   const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
   const mapRef = useRef<MapRef>(null);
   // Stores in the claims-per-store range: bubbles, groups and pins all draw from this list.
@@ -111,7 +107,6 @@ export function ClaimsMap(props: ClaimsMapProps) {
     const n = claimsByRetailer.get(r.id) ?? 0;
     return n >= lo && (hi >= STORE_CLAIMS_MAX || n <= hi);
   }), [allRetailers, claimsByRetailer, lo, hi]);
-  const [storeHover, setStoreHover] = useState<{ x: number; y: number; id: string } | null>(null);
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const zoom = viewState?.zoom ?? 10.4;
@@ -247,8 +242,6 @@ export function ClaimsMap(props: ClaimsMapProps) {
     [mode],
   );
 
-  const hovered = hover ? byGeoid.get(hover.geoid) : undefined;
-  const hoveredProps = hover ? tracts.features.find((f) => f.properties.geoid === hover.geoid)?.properties : undefined;
 
   return (
     // isolate: pins and cards stack inside the map, never above the panels laid over it.
@@ -270,24 +263,10 @@ export function ClaimsMap(props: ClaimsMapProps) {
           if (b) setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
           if (map) setLabelIds(placeLabels(map, visibleStores, claimsByRetailer));
         }}
-        onMouseMove={(e: MapLayerMouseEvent) => {
-          if (onMarker(e.originalEvent)) { setHover(null); setGroupHover(null); setStoreHover(null); return; }
-          const f = e.features?.[0];
-          if (f?.layer.id === 'group-in') {
-            const p = f.properties as { n: number; point_count: number };
-            setHover(null); setStoreHover(null);
-            setGroupHover({ x: e.point.x, y: e.point.y, n: p.n, stores: p.point_count });
-            return;
-          }
-          if (f?.layer.id === 'store-in' || f?.layer.id === 'store-out') {
-            setHover(null); setGroupHover(null);
-            setStoreHover({ x: e.point.x, y: e.point.y, id: String(f.properties?.id) });
-            return;
-          }
-          setGroupHover(null); setStoreHover(null);
-          setHover(f ? { x: e.point.x, y: e.point.y, geoid: String(f.properties?.geoid) } : null);
-        }}
-        onMouseLeave={() => { setHover(null); setGroupHover(null); setStoreHover(null); }}
+        // No hover cards (owner's call): details open only on click, as a pinned card.
+        cursor={cursor}
+        onMouseMove={(e: MapLayerMouseEvent) => setCursor(e.features?.length && !onMarker(e.originalEvent) ? 'pointer' : 'grab')}
+        onMouseLeave={() => setCursor('grab')}
         onClick={(e: MapLayerMouseEvent) => {
           if (onMarker(e.originalEvent)) return; // pins and the pinned card handle their own clicks
           const f = e.features?.[0];
@@ -493,31 +472,6 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </span>
         </Marker>
       </MapGL>
-      {groupHover && !pinned && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: groupHover.x + 14, top: groupHover.y + 14 }}>
-          <Card className="w-[240px] p-3">
-            <p className="text-sm font-semibold text-primary tabular">{fmtInt(groupHover.stores)} stores grouped</p>
-            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(groupHover.n)} listed claims (over $600)</p>
-            <p className="text-xs text-tertiary tabular">{(groupHover.n / groupHover.stores).toFixed(1)} per store on average</p>
-            <p className="mt-2 text-xs text-tertiary">Click or zoom in to see each store.</p>
-          </Card>
-        </div>
-      )}
-      {storeHover && !pinned && storeById.get(storeHover.id) && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: storeHover.x + 14, top: storeHover.y + 14 }}>
-          <Card className="w-[240px] p-3">
-            <p className="truncate text-sm font-semibold text-primary">{storeById.get(storeHover.id)!.name}</p>
-            <p className="truncate text-xs text-tertiary">{storeById.get(storeHover.id)!.address}</p>
-            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(claimsByRetailer.get(storeHover.id) ?? 0)} listed claims (over $600)</p>
-            <p className="mt-1.5 text-xs text-tertiary">Click for recent claims and actions.</p>
-          </Card>
-        </div>
-      )}
-      {hover && hovered && hoveredProps && !pinned && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: hover.x + 14, top: hover.y + 14 }}>
-          <TractTooltip tract={hoveredProps} metrics={hovered} coverage={coverage} />
-        </div>
-      )}
     </div>
   );
 }
