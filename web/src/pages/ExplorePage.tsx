@@ -15,9 +15,10 @@ import { CoverageChip } from '../components/Basics';
 import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../components/Controls';
 import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
-import { StoreCard, TractCard, type PanelTab } from '../components/SelectionCard';
+import { Playback, WINDOW_DAYS, type PlayMode } from '../components/Playback';
+import { StoreCard, TractCard, TREND_DAYS, type PanelTab, type StoreTrend } from '../components/SelectionCard';
 import { PlaceDetails } from '../components/PlaceDetails';
-import { fmtInt } from '../lib/format';
+import { addDays, fmtInt } from '../lib/format';
 import { LABELS } from '../lib/copy';
 
 export interface ExploreData {
@@ -115,11 +116,38 @@ export function ExplorePage({
     longitude: data.coverage.center[0], latitude: data.coverage.center[1], zoom: 10.4,
   });
 
-  const a = useLayer(data, filters, metric);
-  const b = useLayer(data, filters, metricB);
+  // Playback: the map shows listed claims up to playDate (Grow) or the 30 days to it, while
+  // class breaks and bubble sizes keep the full range's scale so growth is visible.
+  const [playDate, setPlayDate] = useState<string | null>(null);
+  const [playMode, setPlayMode] = useState<PlayMode>('grow');
+  const playFilters = useMemo(() => {
+    if (!playDate) return filters;
+    const winFrom = addDays(playDate, -(WINDOW_DAYS - 1));
+    return { ...filters, dateTo: playDate, dateFrom: playMode === 'window' && winFrom > filters.dateFrom ? winFrom : filters.dateFrom };
+  }, [filters, playDate, playMode]);
+  const full = useLayer(data, filters, metric);
+  const live = useLayer(data, playFilters, metric);
+  const a = playDate
+    ? { ...live, breaks: full.breaks, min: full.min, max: full.max, bubbleScale: full.bubbleScale }
+    : full;
+  const b = useLayer(data, playFilters, metricB);
   // What is selected: a store or a tract, its listed claims under the current filters, and
   // the end of the date filter that "recent" counts back from.
   const anchor = filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo;
+  // Trending: listed claims in the 90 days to the end of the date filter vs the 90 before,
+  // under the other filters. Trending = 8+ recent and at least double the earlier 90 days.
+  const trend = useMemo(() => {
+    const recentFrom = addDays(anchor, -(TREND_DAYS - 1));
+    const priorFrom = addDays(anchor, -(2 * TREND_DAYS - 1));
+    const out = new Map<string, StoreTrend>();
+    for (const c of filterClaims(data.claims, data.games, { ...filters, dateFrom: priorFrom, dateTo: anchor }, data.coverage)) {
+      const t = out.get(c.retailerId) ?? { recent: 0, prior: 0, trending: false };
+      if (c.listedDate >= recentFrom) t.recent += 1; else t.prior += 1;
+      out.set(c.retailerId, t);
+    }
+    for (const t of out.values()) t.trending = t.recent >= 8 && t.recent >= 2 * Math.max(t.prior, 1);
+    return out;
+  }, [data, filters, anchor]);
   const selStore = selection?.kind === 'store' ? data.retailers.find((r) => r.id === selection.id) : undefined;
   const selGeoid = selection?.kind === 'tract' ? selection.geoid : selStore?.tractGeoid;
   const selTract = data.tracts.features.find((f) => f.properties.geoid === selGeoid)?.properties;
@@ -137,7 +165,7 @@ export function ExplorePage({
     .map((r) => {
       const n = a.claimsByRetailer.get(r.id) ?? 0;
       const hot = a.bubbleScale.hotMin !== null && n >= a.bubbleScale.hotMin;
-      return { id: r.id, name: r.name, town: r.town, n, cls: hot ? 5 : n > 0 ? classOf(n, a.bubbleScale.breaks) : -1 };
+      return { id: r.id, name: r.name, town: r.town, n, cls: hot ? 5 : n > 0 ? classOf(n, a.bubbleScale.breaks) : -1, trend: trend.get(r.id) };
     })
     .filter((st) => st.n >= lo && (hi >= STORE_CLAIMS_MAX || st.n <= hi))
     .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name));
@@ -155,7 +183,7 @@ export function ExplorePage({
     if (selStore) {
       return {
         lngLat: [selStore.lon, selStore.lat] as [number, number],
-        node: <StoreCard store={selStore} claims={selClaims} games={data.games} anchor={anchor}
+        node: <StoreCard store={selStore} claims={selClaims} games={data.games} anchor={anchor} trend={trend.get(selStore.id)}
           onOpen={setPanelTab} onZoom={() => zoomTo([selStore.lon, selStore.lat], 16)} onClose={clear} />,
       };
     }
@@ -219,6 +247,10 @@ export function ExplorePage({
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
             storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
             viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds} />
+          <div className="absolute bottom-7 left-3 z-10">
+            <Playback from={filters.dateFrom} to={filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo}
+              value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
+          </div>
           {!compare && (
             <div className={controlsBox}>
               <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />

@@ -1,5 +1,5 @@
-import { BarChartSquare02, Building02, LinkExternal01, List, MarkerPin01, ZoomIn } from '@untitledui/icons';
-import { Badge } from '@/components/base/badges/badges';
+import { BarChartSquare02, Building02, LinkExternal01, List, MarkerPin01, TrendUp01, ZoomIn } from '@untitledui/icons';
+import { Badge, BadgeWithIcon } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { CloseButton } from '@/components/base/buttons/close-button';
 import type { Claim, Coverage, GameRef, Retailer, TractMetrics, TractProps } from '../domain/types';
@@ -11,6 +11,10 @@ export type PanelTab = 'claims' | 'stores' | 'games' | 'place';
 
 /** Days counted as "recent", back from the end of the listed-date filter. */
 export const RECENT_DAYS = 30;
+
+/** Trend window: the last TREND_DAYS vs the TREND_DAYS before, to the end of the date filter. */
+export const TREND_DAYS = 90;
+export interface StoreTrend { recent: number; prior: number; trending: boolean }
 
 export function recentOf(claims: Claim[], anchor: string) {
   const from = addDays(anchor, -(RECENT_DAYS - 1));
@@ -66,7 +70,7 @@ interface CommonProps {
 }
 
 /** Pinned card for a clicked store: identity, counts, recent claims, and actions. */
-export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClose }: CommonProps & { store: Retailer }) {
+export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClose, trend }: CommonProps & { store: Retailer; trend?: StoreTrend }) {
   const g = new Map(games.map((x) => [x.id, x]));
   const latest = claims.reduce<string | null>((m, c) => (!m || c.listedDate > m ? c.listedDate : m), null);
   return (
@@ -88,6 +92,14 @@ export function StoreCard({ store, claims, games, anchor, onOpen, onZoom, onClos
           <p className="text-sm font-medium text-primary tabular">{latest ? fmtDate(latest) : '—'}</p>
         </div>
       </div>
+      {trend && (trend.recent > 0 || trend.prior > 0) && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-secondary tabular">
+          {trend.trending
+            ? <BadgeWithIcon type="modern" size="sm" color="gray" iconLeading={TrendUp01}>Trending</BadgeWithIcon>
+            : <TrendUp01 className="size-3.5 text-fg-quaternary" aria-hidden />}
+          {fmtInt(trend.recent)} listed in the last {TREND_DAYS} days vs {fmtInt(trend.prior)} in the {TREND_DAYS} before
+        </div>
+      )}
       <Recent claims={claims} anchor={anchor} games={g} />
       <Actions>
         <Button size="xs" color="secondary" iconLeading={List} onClick={() => onOpen('claims')}>All claims</Button>

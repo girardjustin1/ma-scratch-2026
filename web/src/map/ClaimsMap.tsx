@@ -217,7 +217,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const placeCard = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!pinned || !map) return;
-    const CARD_H = 390, CARD_W = 330, GAP = 18;
+    const CARD_H = 450, CARD_W = 330, GAP = 18;
     const pt = map.project(pinned.lngLat);
     const { width, height } = map.getContainer().getBoundingClientRect();
     const h = pt.x < CARD_W / 2 ? '-left' : pt.x > width - CARD_W / 2 ? '-right' : '';

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown } from '@untitledui/icons';
 import { cx } from '@/utils/cx';
+import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
+import { TREND_DAYS, type StoreTrend } from './SelectionCard';
 import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
@@ -112,7 +114,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
 }
 
 /** A store in view, for the legend's list. cls: 0–4 by the bubble breaks, -1 = no listed claims. */
-export interface StoreInView { id: string; name: string; town: string; n: number; cls: number }
+export interface StoreInView { id: string; name: string; town: string; n: number; cls: number; trend?: StoreTrend }
 
 export interface StoreKeyControls {
   /** Stores in the current map view (after the claims-per-store slider), busiest first. */
@@ -157,12 +159,17 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
   const mode = useMode();
   const t = bubbleTokens[mode];
   const [listOpen, setListOpen] = useState(false);
+  const [listSort, setListSort] = useState<'busiest' | 'trending'>('busiest');
   const labels = classLabels(breaks, min, max, true, (v) => fmtInt(Math.round(v)), true);
   const top = labels.length - 1;
   // With a hottest tier, the top class stops just below it: "32 – 79", then "🔥 80+".
   if (hotMin !== null && top > 0) labels[top] = `${fmtInt(breaks[top - 1] + 1)} – ${fmtInt(hotMin - 1)}`;
   const count = (cls: number) => controls?.inView.filter((s) => s.cls === cls).length;
-  const shown = controls ? controls.inView.filter((s) => !controls.hidden.has(s.cls)) : [];
+  const visible = controls ? controls.inView.filter((s) => !controls.hidden.has(s.cls)) : [];
+  const trendingCount = visible.filter((s) => s.trend?.trending).length;
+  const shown = listSort === 'trending'
+    ? visible.filter((s) => s.trend?.trending).sort((x, y) => (y.trend!.recent - y.trend!.prior) - (x.trend!.recent - x.trend!.prior))
+    : visible;
   return (
     <div className="mt-3 border-t border-secondary pt-3">
       <div className="flex items-baseline gap-2">
@@ -218,6 +225,20 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
             <ChevronDown className={cx('ml-auto size-4 text-fg-quaternary transition-transform', listOpen && 'rotate-180')} aria-hidden />
           </button>
           {listOpen && (
+            <div className="mt-2">
+              <ButtonGroup size="sm" aria-label="Sort stores in view" disallowEmptySelection selectedKeys={[listSort]}
+                onSelectionChange={(k) => { const v = [...k][0]; if (v) setListSort(v as 'busiest' | 'trending'); }}>
+                <ButtonGroupItem id="busiest" className="selected:bg-tertiary selected:text-primary">Busiest</ButtonGroupItem>
+                <ButtonGroupItem id="trending" className="selected:bg-tertiary selected:text-primary">Trending · {fmtInt(trendingCount)}</ButtonGroupItem>
+              </ButtonGroup>
+              {listSort === 'trending' && (
+                <p className="mt-1.5 text-[11px] leading-[1.4] text-tertiary">
+                  8+ listed in the last {TREND_DAYS} days and at least double the {TREND_DAYS} days before.
+                </p>
+              )}
+            </div>
+          )}
+          {listOpen && (
             <ul className="mt-1.5 flex max-h-56 flex-col overflow-y-auto">
               {shown.slice(0, 200).map((st) => (
                 <li key={st.id}>
@@ -229,11 +250,15 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
                       <span className="block truncate text-xs font-medium text-primary">{st.cls === 5 && '🔥 '}{st.name}</span>
                       <span className="block truncate text-[11px] text-tertiary">{st.town}</span>
                     </span>
-                    <span className="text-xs font-semibold text-primary tabular">{fmtInt(st.n)}</span>
+                    {listSort === 'trending' && st.trend
+                      ? <span className="text-right text-xs text-secondary tabular">
+                          <span className="font-semibold text-primary">{fmtInt(st.trend.recent)}</span> vs {fmtInt(st.trend.prior)}
+                        </span>
+                      : <span className="text-xs font-semibold text-primary tabular">{fmtInt(st.n)}</span>}
                   </button>
                 </li>
               ))}
-              {shown.length === 0 && <li className="py-1 text-xs text-tertiary">No stores in view with the current filters.</li>}
+              {shown.length === 0 && <li className="py-1 text-xs text-tertiary">{listSort === 'trending' ? 'No trending stores in view.' : 'No stores in view with the current filters.'}</li>}
               {shown.length > 200 && <li className="py-1 text-xs text-tertiary">Showing the 200 busiest; zoom in for the rest.</li>}
             </ul>
           )}
