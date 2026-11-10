@@ -1,9 +1,9 @@
-import { useId, useMemo, useState } from 'react';
-import { ChevronDown, SearchLg, SwitchVertical01 } from '@untitledui/icons';
+import { Fragment, useId, useMemo, useState } from 'react';
+import { ChevronDown, FilterLines, SearchLg, SwitchVertical01 } from '@untitledui/icons';
 import {
   Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Header as AriaHeader,
   ListBox as AriaListBox, ListBoxItem as AriaListBoxItem, ListBoxSection as AriaListBoxSection,
-  Popover as AriaPopover, Text as AriaText,
+  Popover as AriaPopover, Text as AriaText, ToggleButton as AriaToggleButton,
 } from 'react-aria-components';
 import { Badge } from '@/components/base/badges/badges';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
@@ -20,6 +20,80 @@ import { CaveatNote } from './Basics';
 
 export type GameSort = 'unclaimed' | 'top' | 'claims' | 'newest' | 'name';
 
+// ---- Filter chips --------------------------------------------------------------------
+// Chips narrow the list only; the map changes when games are selected. Within a facet the
+// chips combine with OR, across facets with AND.
+
+interface FacetCtx { claimCounts: Map<string, number>; anchor: string }
+interface FacetOption { id: string; label: string; test: (g: GameRef, ctx: FacetCtx) => boolean }
+interface Facet { key: string; label: string; options: FacetOption[] }
+export type FacetSelection = Record<string, string[]>;
+
+const daysBefore = (iso: string, anchor: string) =>
+  Math.round((Date.parse(anchor) - Date.parse(iso)) / 86_400_000);
+
+function buildFacets(games: GameRef[]): Facet[] {
+  const prices = [...new Set(games.map((g) => g.price).filter((p): p is number => p !== null))].sort((a, b) => a - b);
+  const top = (g: GameRef) => g.prizes?.topPrize;
+  const facets: Facet[] = [
+    {
+      key: 'price', label: 'Price',
+      options: prices.map((p) => ({ id: String(p), label: `$${p}`, test: (g) => g.price === p })),
+    },
+    {
+      key: 'left', label: 'Prizes left',
+      options: [
+        { id: 'topLeft', label: 'Top prize still out', test: (g) => (g.prizes?.topRemaining ?? 0) > 0 },
+        { id: 'topGone', label: 'All top prizes claimed', test: (g) => g.prizes?.topRemaining === 0 },
+        { id: 'over600', label: 'Unclaimed over $600', test: (g) => (g.prizes?.remainingOver600 ?? 0) > 0 },
+      ],
+    },
+    {
+      key: 'top', label: 'Top prize',
+      options: [
+        { id: 'lt100k', label: 'Under $100K', test: (g) => (top(g) ?? Infinity) < 100_000 },
+        { id: '100k', label: '$100K – $999K', test: (g) => { const t = top(g); return t != null && t >= 100_000 && t < 1_000_000; } },
+        { id: '1m', label: '$1M and up', test: (g) => (top(g) ?? 0) >= 1_000_000 },
+      ],
+    },
+    {
+      key: 'launch', label: 'Launched',
+      options: [
+        { id: '90d', label: 'Last 90 days', test: (g, c) => !!g.launchDate && daysBefore(g.launchDate, c.anchor) <= 90 },
+        { id: '1y', label: '91 days – 1 year', test: (g, c) => { const d = g.launchDate ? daysBefore(g.launchDate, c.anchor) : -1; return d > 90 && d <= 365; } },
+        { id: 'older', label: 'Over a year ago', test: (g, c) => !!g.launchDate && daysBefore(g.launchDate, c.anchor) > 365 },
+      ],
+    },
+    {
+      key: 'tags', label: 'Lottery tags',
+      options: [
+        { id: 'new', label: 'New', test: (g) => !!g.tags?.includes('new') },
+        { id: 'ending', label: 'Ending soon', test: (g) => !!g.tags?.includes('ending') },
+        { id: 'secondChance', label: 'Second chance', test: (g) => !!g.tags?.includes('secondChance') },
+        { id: 'scan', label: 'Scan to enter', test: (g) => !!g.tags?.includes('scan') },
+      ],
+    },
+    {
+      key: 'radius', label: 'In your radius',
+      options: [
+        { id: 'has', label: 'Has listed claims', test: (g, c) => (c.claimCounts.get(g.id) ?? 0) > 0 },
+        { id: 'none', label: 'None listed', test: (g, c) => (c.claimCounts.get(g.id) ?? 0) === 0 },
+      ],
+    },
+  ];
+  // A facet with nothing to choose from (e.g. no tags in sample data) is left out.
+  return facets.filter((f) => f.options.some((o) => games.some((g) => o.test(g, { claimCounts: new Map(), anchor: '9999-12-31' })) || f.key === 'radius'));
+}
+
+/** True when a game passes every active facet (OR within a facet, AND across), optionally ignoring one. */
+function passesFacets(g: GameRef, facets: Facet[], sel: FacetSelection, ctx: FacetCtx, skip?: string) {
+  return facets.every((f) => {
+    const on = sel[f.key];
+    if (f.key === skip || !on?.length) return true;
+    return f.options.some((o) => on.includes(o.id) && o.test(g, ctx));
+  });
+}
+
 const SORTS: { value: GameSort; label: string }[] = [
   { value: 'unclaimed', label: 'Most unclaimed prizes over $600' },
   { value: 'top', label: 'Most top prizes left' },
@@ -32,18 +106,26 @@ const SORTS: { value: GameSort; label: string }[] = [
 export const UNKNOWN_PRICE = -1;
 const nameKey = (n: string) => n.replace(/^[$\d,.\s]+/, '').trim() || n;
 
-/** Sort and group games. Exported for tests and stories. */
-export function arrangeGames(args: {
-  games: GameRef[]; sort: GameSort; query: string; onSaleOnly: boolean; prices: number[];
-  claimCounts: Map<string, number>; groupByPrice: boolean;
-}) {
-  const { games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice } = args;
+/** Search, on-sale and the Ticket price filter: the base every chip count starts from. */
+function baseFilter(games: GameRef[], query: string, onSaleOnly: boolean, prices: number[]) {
   const q = query.trim().toLowerCase();
-  const shown = games.filter(
+  return games.filter(
     (g) =>
       (!q || g.name.toLowerCase().includes(q)) &&
       (!onSaleOnly || g.onSale) &&
       (prices.length === 0 || prices.includes(g.price ?? UNKNOWN_PRICE)),
+  );
+}
+
+/** Sort and group games. Exported for tests and stories. */
+export function arrangeGames(args: {
+  games: GameRef[]; sort: GameSort; query: string; onSaleOnly: boolean; prices: number[];
+  claimCounts: Map<string, number>; groupByPrice: boolean;
+  facets?: { list: Facet[]; selection: FacetSelection; ctx: FacetCtx };
+}) {
+  const { games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice, facets } = args;
+  const shown = baseFilter(games, query, onSaleOnly, prices).filter(
+    (g) => !facets || passesFacets(g, facets.list, facets.selection, facets.ctx),
   );
   // Missing values sort last, never as zero.
   const desc = (a: number | null | undefined, b: number | null | undefined) => (b ?? -Infinity) - (a ?? -Infinity);
@@ -71,6 +153,65 @@ export function arrangeGames(args: {
       };
     }),
   };
+}
+
+function Chip({ label, count, selected, onToggle }: { label: string; count: number; selected: boolean; onToggle: () => void }) {
+  const disabled = count === 0 && !selected;
+  return (
+    <AriaToggleButton
+      isSelected={selected} onChange={onToggle} isDisabled={disabled}
+      className={({ isSelected, isHovered, isFocusVisible }) => cx(
+        'inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 outline-hidden transition duration-100 ease-linear ring-inset',
+        isSelected ? 'bg-brand-solid text-white ring-transparent' : 'bg-primary text-secondary ring-primary',
+        !isSelected && isHovered && 'bg-primary_hover',
+        isFocusVisible && 'ring-2 ring-focus-ring',
+        disabled && 'cursor-not-allowed opacity-40',
+      )}
+    >
+      {label}
+      <span className={cx('tabular', selected ? 'text-white/70' : 'text-quaternary')}>{fmtInt(count)}</span>
+    </AriaToggleButton>
+  );
+}
+
+function FilterChips({ facets, selection, setSelection, counts }: {
+  facets: Facet[]; selection: FacetSelection; setSelection: (s: FacetSelection) => void;
+  counts: (facetKey: string, optionId: string) => number;
+}) {
+  const [open, setOpen] = useState(true);
+  const active = Object.values(selection).reduce((n, v) => n + v.length, 0);
+  const toggle = (key: string, id: string) => {
+    const cur = selection[key] ?? [];
+    setSelection({ ...selection, [key]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <AriaButton onPress={() => setOpen(!open)} className="flex cursor-pointer items-center gap-1 text-sm font-semibold text-secondary outline-hidden">
+          <FilterLines className="size-4 text-fg-quaternary" aria-hidden />
+          Filters{active ? ` · ${active} on` : ''}
+          <ChevronDown aria-hidden className={cx('size-4 text-fg-quaternary transition-transform', open && 'rotate-180')} />
+        </AriaButton>
+        <div className="flex-1" />
+        {active > 0 && <Button size="sm" color="link-gray" onClick={() => setSelection({})}>Clear filters</Button>}
+      </div>
+      {open && (
+        <div className="grid grid-cols-[96px_1fr] items-start gap-x-3 gap-y-2">
+          {facets.map((f) => (
+            <Fragment key={f.key}>
+              <span className="pt-1 text-xs font-medium text-tertiary">{f.label}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {f.options.map((o) => (
+                  <Chip key={o.id} label={o.label} count={counts(f.key, o.id)}
+                    selected={!!selection[f.key]?.includes(o.id)} onToggle={() => toggle(f.key, o.id)} />
+                ))}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Metric({ value, label, muted }: { value: string; label: string; muted?: boolean }) {
@@ -138,12 +279,27 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
   const [onSaleOnly, setOnSaleOnly] = useState(hasSaleInfo);
   const [sort, setSort] = useState<GameSort>(games.some((g) => g.prizes) ? 'unclaimed' : 'claims');
   const [groupByPrice, setGroupByPrice] = useState(true);
+  const [selection, setSelection] = useState<FacetSelection>({});
+
+  const asOf = games.find((g) => g.prizes)?.prizes?.asOf;
+  // Launch ages count back from the prize-table date (else the newest launch), never "today".
+  const anchor = asOf ?? games.reduce((m, g) => (g.launchDate && g.launchDate > m ? g.launchDate : m), '0000-01-01');
+  const facetList = useMemo(() => buildFacets(games), [games]);
+  const ctx = useMemo(() => ({ claimCounts, anchor }), [claimCounts, anchor]);
+  const base = useMemo(() => baseFilter(games, query, onSaleOnly, prices), [games, query, onSaleOnly, prices]);
+  // A chip's count = games left if it were the only choice in its row, given every other row.
+  const counts = (key: string, id: string) => {
+    const opt = facetList.find((f) => f.key === key)?.options.find((o) => o.id === id);
+    return opt ? base.filter((g) => opt.test(g, ctx) && passesFacets(g, facetList, selection, ctx, key)).length : 0;
+  };
 
   const { total, groups } = useMemo(
-    () => arrangeGames({ games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice }),
-    [games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice],
+    () => arrangeGames({
+      games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice,
+      facets: { list: facetList, selection, ctx },
+    }),
+    [games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice, facetList, selection, ctx],
   );
-  const asOf = games.find((g) => g.prizes)?.prizes?.asOf;
   const onSaleCount = games.filter((g) => g.onSale).length;
   const shownIds = groups.flatMap((gr) => gr.games.map((g) => g.id));
 
@@ -207,6 +363,9 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
                       {(item) => <Select.Item id={item.id} label={item.label} />}
                     </Select>
                   </div>
+                  <div className="border-t border-secondary pt-3">
+                    <FilterChips facets={facetList} selection={selection} setSelection={setSelection} counts={counts} />
+                  </div>
                   {prices.length > 0 && (
                     <p className="text-xs text-tertiary">
                       Showing {prices.map((p) => (p === UNKNOWN_PRICE ? 'unknown-price' : `$${p}`)).join(', ')} games, set by the Ticket price filter.
@@ -241,6 +400,7 @@ export function GamePicker({ games, value, onChange, prices, claimCounts }: Game
                   <div className="flex items-center gap-2">
                     <p className="flex-1 text-xs text-tertiary tabular">
                       {value.length ? `${value.length} selected` : 'No game selected: the map shows all games'} · {total} shown
+                      {total > 0 && value.length === 0 && Object.values(selection).some((v) => v.length) && ' · Select shown to map them'}
                     </p>
                     <Button size="sm" color="secondary" isDisabled={!shownIds.length}
                       onClick={() => onChange([...new Set([...value, ...shownIds])])}>

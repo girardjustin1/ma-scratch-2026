@@ -24,6 +24,7 @@ TRACT_RADIUS_MI = 12  # draw a ring of no-data tracts beyond the 10 mi coverage 
 COVERAGE_MI = 10  # the retailer sweep is proven complete to this radius
 RELEASE = "2020-2024"
 LOW_MATCH_MIN_CLAIMS = 50  # towns with fewer listed claims get no match-rate flag
+TAGS = {"New Game": "new", "Expiring Game": "ending", "Second Chance": "secondChance", "Scan to Enter": "scan"}
 
 
 def load_pin() -> tuple[float, float]:
@@ -126,6 +127,9 @@ def main():
                 "price": cat["price"] if cat and cat.get("price") is not None else price,
                 "launchDate": (cat or {}).get("startDate") or start,
                 "onSale": cat is not None,
+                # The Lottery's own catalog tags, shortened: new, ending (sales ending soon),
+                # secondChance, scan (scan to enter).
+                "tags": sorted({TAGS[t] for t in (cat or {}).get("tags") or [] if t in TAGS}),
                 "prizes": prizes.get(g)}
 
     games = [meta(g) for g in game_ids]

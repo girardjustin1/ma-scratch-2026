@@ -58,6 +58,8 @@ export interface GameRef {
   onSale?: boolean;
   /** Statewide prize table on one date. null = no table (game not on sale that day). */
   prizes?: GamePrizes | null;
+  /** The Lottery's catalog tags: new, ending (sales ending soon), secondChance, scan. */
+  tags?: string[];
 }
 
 /** Statewide counts from the Lottery's prize table. Never per store. */
