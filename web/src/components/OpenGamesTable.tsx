@@ -86,7 +86,6 @@ function GameCell({ game }: { game: Game }) {
     <div className="flex items-center gap-2">
       <div className="min-w-0">
         <p className="text-sm font-medium text-primary">{game.name}</p>
-        <p className="text-xs text-tertiary tabular">#{game.id.slice(1)}</p>
       </div>
       {game.status === 'claims_only' && (
         <Badge type="modern" size="sm" color="gray" className="whitespace-nowrap">

@@ -64,6 +64,8 @@ export interface GameRef {
   image?: string | null;
   /** Statewide EV estimate (domain/ev.ts). Per ticket, never per store. */
   ev?: GameEv | null;
+  /** Prizes left / printed per prize bucket (domain/prizeBuckets.ts), statewide. */
+  buckets?: Record<string, { left: number; total: number }> | null;
 }
 
 /** Statewide expected value per ticket, from the prize table (PRD §4). */
