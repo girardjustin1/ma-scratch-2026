@@ -3,7 +3,7 @@ import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { distance, point } from '@turf/turf';
-import { claimCountBreaks, quantileBreaks, storeCountBreaks } from '../domain/classify';
+import { claimCountBreaks, classOf, quantileBreaks, storeCountBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
   Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
@@ -12,8 +12,8 @@ import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
 import type { EvData } from '../data/localView';
 import type { Basemap } from '../map/mapStyle';
 import { CoverageChip } from '../components/Basics';
-import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
-import { MapLegend } from '../components/MapLegend';
+import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../components/Controls';
+import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
 import { StoreCard, TractCard, type PanelTab } from '../components/SelectionCard';
 import { PlaceDetails } from '../components/PlaceDetails';
@@ -99,6 +99,9 @@ export function ExplorePage({
     const f = initialSelected ? data.tracts.features.find((t) => t.properties.geoid === initialSelected) : undefined;
     return f ? { kind: 'tract', geoid: f.properties.geoid, lngLat: f.properties.centroid } : null;
   });
+  // Store key: classes switched off in the legend, and the map's visible bounds.
+  const [hiddenClasses, setHiddenClasses] = useState<Set<number>>(new Set());
+  const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected ? 'claims' : null);
   const [layers, setLayers] = useState({ tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
   const [view, setView] = useState<Partial<ViewState>>({
@@ -119,6 +122,23 @@ export function ExplorePage({
     ? a.claims.filter((c) => c.retailerId === selStore.id)
     : (() => { const ids = new Set(tractStores.map((r) => r.id)); return a.claims.filter((c) => ids.has(c.retailerId)); })();
   const clear = () => { setSelection(null); setPanelTab(null); };
+
+  // Stores in the current view (respecting the claims-per-store slider), busiest first.
+  const [lo, hi] = filters.storeClaims ?? [0, STORE_CLAIMS_MAX];
+  const inView: StoreInView[] = !bounds ? [] : data.retailers
+    .filter((r) => r.lon >= bounds[0] && r.lon <= bounds[2] && r.lat >= bounds[1] && r.lat <= bounds[3])
+    .map((r) => {
+      const n = a.claimsByRetailer.get(r.id) ?? 0;
+      return { id: r.id, name: r.name, town: r.town, n, cls: n > 0 ? classOf(n, a.bubbleScale.breaks) : -1 };
+    })
+    .filter((st) => st.n >= lo && (hi >= STORE_CLAIMS_MAX || st.n <= hi))
+    .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name));
+  const storeControls: StoreKeyControls = {
+    inView, hidden: hiddenClasses,
+    onToggle: (cls) => setHiddenClasses((h) => { const n = new Set(h); if (n.has(cls)) n.delete(cls); else n.add(cls); return n; }),
+    onShowAll: () => setHiddenClasses(new Set()),
+    onSelectStore: (id) => selectStore(id),
+  };
   const selectStore = (id: string) => { setSelection({ kind: 'store', id }); setPanelTab((t) => (t ? (t === 'stores' ? 'claims' : t) : null)); };
   const zoomTo = (lngLat: [number, number], zoom: number) => setView({ ...view, longitude: lngLat[0], latitude: lngLat[1], zoom });
 
@@ -154,6 +174,7 @@ export function ExplorePage({
     onPinChange: (pin: [number, number]) => setFilters({ ...filters, pin }),
     selection,
     storeRange: filters.storeClaims,
+    hiddenClasses,
     onSelectTract: (geoid: string, lngLat: [number, number]) => setSelection({ kind: 'tract', geoid, lngLat }),
     onSelectStore: selectStore,
     onClearSelection: clear,
@@ -189,7 +210,7 @@ export function ExplorePage({
         <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
             storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks}
-            viewState={view} onMove={setView} pinned={pinned} />
+            viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds} />
           {!compare && (
             <div className={controlsBox}>
               <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />
@@ -197,7 +218,7 @@ export function ExplorePage({
           )}
           <div className={legendBox}>
             <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
-              bubbles={layers.showBubbles ? a.bubbleScale : undefined} />
+              bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined} />
           </div>
           <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
             Click a store or tract for recent claims and actions · double-click to move the pin

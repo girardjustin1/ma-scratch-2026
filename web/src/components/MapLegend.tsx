@@ -1,4 +1,6 @@
-import { AlertTriangle } from '@untitledui/icons';
+import { useState } from 'react';
+import { AlertTriangle, ChevronDown } from '@untitledui/icons';
+import { cx } from '@/utils/cx';
 import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { CAVEATS, LABELS } from '../lib/copy';
@@ -31,6 +33,8 @@ export interface MapLegendProps {
   lowMatchCount?: number;
   /** Bubble classes (listed claims per store in the radius); omit when bubbles are off. */
   bubbles?: { breaks: number[]; min: number; max: number; stores: number };
+  /** Makes the store key interactive: show/hide by class and list the stores in view. */
+  storeControls?: StoreKeyControls;
 }
 
 /** Fixed-size slot so every key mark lines up with its label. */
@@ -42,7 +46,7 @@ const Key = ({ children }: { children: React.ReactNode }) => (
  * Monochrome card. The only colors are the swatches that key the map, taken from the same
  * tokens the map paints with, so the legend always matches what is drawn.
  */
-export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles }: MapLegendProps) {
+export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls }: MapLegendProps) {
   const mode = useMode();
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
   const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v), metric === 'claims');
@@ -79,7 +83,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
           </span>
         </li>
       </ul>
-      {bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} />}
+      {bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} controls={storeControls} />}
       <div className="mt-3 flex flex-col gap-1.5 border-t border-secondary pt-3">
         <div className="flex items-center gap-2">
           {!coverage.statewide && <Key><span className="w-full" style={{ borderTop: `2px solid ${ink}`, opacity: 0.85 }} /></Key>}
@@ -107,39 +111,80 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
   );
 }
 
-/** Bubble key: five sizes and colors for listed claims per store, plus how groups read. */
-function BubbleKey({ breaks, min, max, stores }: { breaks: number[]; min: number; max: number; stores: number }) {
+/** A store in view, for the legend's list. cls: 0–4 by the bubble breaks, -1 = no listed claims. */
+export interface StoreInView { id: string; name: string; town: string; n: number; cls: number }
+
+export interface StoreKeyControls {
+  /** Stores in the current map view (after the claims-per-store slider), busiest first. */
+  inView: StoreInView[];
+  hidden: Set<number>;
+  onToggle: (cls: number) => void;
+  onShowAll: () => void;
+  onSelectStore: (id: string) => void;
+}
+
+/** One legend row that doubles as a show/hide toggle, with the count in view. */
+function KeyRow({ cls, hidden, count, onToggle, mark, children }: {
+  cls: number; hidden: boolean; count?: number; onToggle?: (cls: number) => void; mark: React.ReactNode; children: React.ReactNode;
+}) {
+  const body = (
+    <>
+      <span className={cx('flex w-[32px] shrink-0 items-center justify-center', hidden && 'opacity-30')} aria-hidden>{mark}</span>
+      <span className={cx('flex-1 text-left text-sm text-secondary tabular', hidden && 'text-quaternary line-through')}>{children}</span>
+      {count !== undefined && <span className="text-xs text-tertiary tabular">{fmtInt(count)}</span>}
+    </>
+  );
+  if (!onToggle) return <li className="flex items-center gap-2">{body}</li>;
+  return (
+    <li>
+      <button type="button" onClick={() => onToggle(cls)} aria-pressed={!hidden}
+        title={hidden ? 'Show these stores' : 'Hide these stores'}
+        className="-mx-1.5 flex w-[calc(100%+0.75rem)] cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 outline-hidden hover:bg-primary_hover focus-visible:ring-2 focus-visible:ring-focus-ring">
+        {body}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Bubble key: five sizes and colors for listed claims per store, plus how groups read.
+ * With controls, each row toggles those stores on the map and shows how many are in view,
+ * and a list names the stores currently in view.
+ */
+function BubbleKey({ breaks, min, max, stores, controls }: {
+  breaks: number[]; min: number; max: number; stores: number; controls?: StoreKeyControls;
+}) {
   const mode = useMode();
   const t = bubbleTokens[mode];
+  const [listOpen, setListOpen] = useState(false);
   const labels = classLabels(breaks, min, max, true, (v) => fmtInt(Math.round(v)), true);
   const top = labels.length - 1;
+  const count = (cls: number) => controls?.inView.filter((s) => s.cls === cls).length;
+  const shown = controls ? controls.inView.filter((s) => !controls.hidden.has(s.cls)) : [];
   return (
     <div className="mt-3 border-t border-secondary pt-3">
-      <p className="text-sm font-semibold text-primary">Stores · listed claims</p>
+      <div className="flex items-baseline gap-2">
+        <p className="flex-1 text-sm font-semibold text-primary">Stores · listed claims</p>
+        {controls && controls.hidden.size > 0 && (
+          <button type="button" onClick={controls.onShowAll} className="cursor-pointer text-xs font-semibold text-secondary hover:text-primary">Show all</button>
+        )}
+      </div>
       <p className="mb-2 text-xs text-tertiary tabular">
         {breaks.join() === '1,2,4,9' ? 'Fixed classes' : 'Quantile classes'} · {fmtInt(stores)} stores with listed claims in radius
+        {controls && <> · click a row to show or hide; numbers are stores in view</>}
       </p>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-0.5">
         {labels.map((label, i) => (
-          <li key={label} className="flex items-center gap-2">
-            <span className="flex w-[32px] shrink-0 items-center justify-center" aria-hidden>
-              <span
-                className="rounded-full"
-                style={{ width: bubbleRadii[i] * 2, height: bubbleRadii[i] * 2, backgroundColor: t.ramp[i], boxShadow: `0 0 0 1px ${t.stroke}` }}
-              />
-            </span>
-            <span className="text-sm text-secondary tabular">
-              {label}{i === top && top === 4 && <span className="font-semibold text-primary"> · Top stores</span>}
-            </span>
-          </li>
+          <KeyRow key={label} cls={i} hidden={!!controls?.hidden.has(i)} count={count(i)} onToggle={controls?.onToggle}
+            mark={<span className="rounded-full" style={{ width: bubbleRadii[i] * 2, height: bubbleRadii[i] * 2, backgroundColor: t.ramp[i], boxShadow: `0 0 0 1px ${t.stroke}` }} />}>
+            {label}{i === top && top === 4 && <span className="font-semibold text-primary"> · Top stores</span>}
+          </KeyRow>
         ))}
-        <li className="flex items-center gap-2">
-          <span className="flex w-[32px] shrink-0 items-center justify-center" aria-hidden>
-            <span className="size-[5px] rounded-full" style={{ boxShadow: `0 0 0 1px ${t.hollow}` }} />
-          </span>
-          <span className="text-sm text-secondary">No listed claims</span>
-        </li>
-        <li className="flex items-center gap-2">
+        <KeyRow cls={-1} hidden={!!controls?.hidden.has(-1)} count={count(-1)} onToggle={controls?.onToggle}
+          mark={<span className="size-[5px] rounded-full" style={{ boxShadow: `0 0 0 1px ${t.hollow}` }} />}>
+          No listed claims
+        </KeyRow>
+        <li className="flex items-center gap-2 pt-1">
           <span className="flex w-[32px] shrink-0 items-center justify-center" aria-hidden>
             <span
               className="grid size-[26px] place-items-center rounded-full text-[9px] font-semibold text-white"
@@ -153,6 +198,35 @@ function BubbleKey({ breaks, min, max, stores }: { breaks: number[]; min: number
           </span>
         </li>
       </ul>
+      {controls && (
+        <div className="mt-3 border-t border-secondary pt-2">
+          <button type="button" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}
+            className="flex w-full cursor-pointer items-center gap-1 text-sm font-semibold text-primary outline-hidden">
+            Stores in view <span className="font-normal text-tertiary tabular">· {fmtInt(shown.length)}</span>
+            <ChevronDown className={cx('ml-auto size-4 text-fg-quaternary transition-transform', listOpen && 'rotate-180')} aria-hidden />
+          </button>
+          {listOpen && (
+            <ul className="mt-1.5 flex max-h-56 flex-col overflow-y-auto">
+              {shown.slice(0, 200).map((st) => (
+                <li key={st.id}>
+                  <button type="button" onClick={() => controls.onSelectStore(st.id)}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-primary_hover">
+                    <span className="size-2.5 shrink-0 rounded-full"
+                      style={st.cls >= 0 ? { backgroundColor: t.ramp[st.cls] } : { boxShadow: `0 0 0 1px ${t.hollow}` }} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-primary">{st.name}</span>
+                      <span className="block truncate text-[11px] text-tertiary">{st.town}</span>
+                    </span>
+                    <span className="text-xs font-semibold text-primary tabular">{fmtInt(st.n)}</span>
+                  </button>
+                </li>
+              ))}
+              {shown.length === 0 && <li className="py-1 text-xs text-tertiary">No stores in view with the current filters.</li>}
+              {shown.length > 200 && <li className="py-1 text-xs text-tertiary">Showing the 200 busiest; zoom in for the rest.</li>}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

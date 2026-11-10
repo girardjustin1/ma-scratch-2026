@@ -26,6 +26,10 @@ export interface ClaimsMapProps {
   bubbleBreaks: number[];
   /** Only stores whose listed claims fall in [min, max] are drawn; max >= storeRangeTop means no cap. */
   storeRange?: [number, number];
+  /** Store classes switched off in the legend (0–4 by bubbleBreaks; -1 = no listed claims). */
+  hiddenClasses?: Set<number>;
+  /** Called with the visible bounds [west, south, east, north] whenever the map settles. */
+  onBounds?: (b: [number, number, number, number]) => void;
   coverage: Coverage;
   pin: [number, number];
   radiusMiles: number;
@@ -92,7 +96,7 @@ const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
     tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
-    storeRange = [0, STORE_CLAIMS_MAX],
+    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
     height = '100%',
@@ -105,8 +109,9 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const [lo, hi] = storeRange;
   const retailers = useMemo(() => allRetailers.filter((r) => {
     const n = claimsByRetailer.get(r.id) ?? 0;
+    if (hiddenClasses?.size && hiddenClasses.has(n > 0 ? classOf(n, bubbleBreaks) : -1)) return false;
     return n >= lo && (hi >= STORE_CLAIMS_MAX || n <= hi);
-  }), [allRetailers, claimsByRetailer, lo, hi]);
+  }), [allRetailers, claimsByRetailer, lo, hi, hiddenClasses, bubbleBreaks]);
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const zoom = viewState?.zoom ?? 10.4;
@@ -260,7 +265,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
           placeCard();
           const map = mapRef.current?.getMap();
           const b = map?.getBounds();
-          if (b) setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+          if (b) {
+            const next: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            setBounds(next);
+            onBounds?.(next);
+          }
           if (map) setLabelIds(placeLabels(map, visibleStores, claimsByRetailer));
         }}
         // No hover cards (owner's call): details open only on click, as a pinned card.
