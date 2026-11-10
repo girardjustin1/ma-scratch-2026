@@ -7,7 +7,8 @@ import { TractTooltip } from '../components/TractTooltip';
 import { MapLegend } from '../components/MapLegend';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
 import { GamePicker } from '../components/GamePicker';
-import { DetailBody } from '../components/DetailDrawer';
+import { DetailPanel } from '../components/DetailDrawer';
+import { StoreCard, TractCard, type PanelTab } from '../components/SelectionCard';
 import { buildGameRows, buildPrizeRows, OpenGamesTable, type GamesView } from '../components/OpenGamesTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
 import { EvPanel } from '../components/EvPanel';
@@ -122,21 +123,57 @@ export const Layers: StoryObj<{ online: boolean }> = {
 };
 
 const sel = coveredBusy;
-const selRet = new Set(S.retailers.filter((r) => r.tractGeoid === sel.geoid).map((r) => r.id));
-export const DrillDown: Story = {
-  name: 'Drill-down drawer body',
+const selStores = S.retailers.filter((r) => r.tractGeoid === sel.geoid);
+const selRet = new Set(selStores.map((r) => r.id));
+const selClaims = S.claims.filter((c) => selRet.has(c.retailerId));
+const busyStore = [...selStores].sort((a, b) => selClaims.filter((c) => c.retailerId === b.id).length - selClaims.filter((c) => c.retailerId === a.id).length)[0];
+const storeClaims = S.claims.filter((c) => c.retailerId === busyStore?.id);
+const noop = () => {};
+
+export const StoreCardStory: Story = {
+  name: 'Pinned card · store',
+  render: () => <StoreCard store={busyStore} claims={storeClaims} games={S.games} anchor={S.coverage.dateTo} onOpen={noop} onZoom={noop} onClose={noop} />,
+};
+export const TractCardStory: Story = {
+  name: 'Pinned card · tract',
   render: () => (
-    <div className="inline-block rounded-xl bg-primary ring-1 ring-secondary">
-      <DetailBody tract={props(sel.geoid)} metrics={sel} claims={S.claims.filter((c) => selRet.has(c.retailerId))}
-        games={S.games} retailers={S.retailers} coverage={S.coverage} onClose={() => {}} />
-    </div>
+    <TractCard tract={props(sel.geoid)} metrics={sel} coverage={S.coverage} stores={selStores} claims={selClaims}
+      games={S.games} anchor={S.coverage.dateTo} onOpen={noop} onZoom={noop} onClose={noop} />
   ),
 };
+export const DrillDown: StoryObj<{ tab: PanelTab }> = {
+  name: 'Detail panel · tract',
+  args: { tab: 'claims' },
+  argTypes: { tab: { control: 'inline-radio', options: ['claims', 'stores', 'games'] } },
+  render: ({ tab }) => {
+    const [t, setT] = useState<PanelTab>(tab);
+    return (
+      <div className="h-[760px]">
+        <DetailPanel context={{ kind: 'tract', tract: props(sel.geoid), metrics: sel, stores: selStores }} tab={t} onTab={setT} onClose={noop}
+          claims={selClaims} games={S.games} retailers={S.retailers} coverage={S.coverage} anchor={S.coverage.dateTo} />
+      </div>
+    );
+  },
+};
+export const DrillDownStore: Story = {
+  name: 'Detail panel · store',
+  render: () => {
+    const [t, setT] = useState<PanelTab>('claims');
+    return (
+      <div className="h-[760px]">
+        <DetailPanel context={{ kind: 'store', store: busyStore, tract: props(sel.geoid) }} tab={t} onTab={setT} onClose={noop}
+          claims={storeClaims} games={S.games} retailers={S.retailers} coverage={S.coverage} anchor={S.coverage.dateTo}
+          placeSlot={<p className="text-sm text-tertiary">Place details are covered by the Place details stories.</p>} />
+      </div>
+    );
+  },
+};
 export const DrillDownUncovered: Story = {
-  name: 'Drill-down · outside coverage',
+  name: 'Detail panel · outside coverage',
   render: () => (
-    <div className="inline-block rounded-xl bg-primary ring-1 ring-secondary">
-      <DetailBody tract={props(uncovered.geoid)} metrics={uncovered} claims={[]} games={S.games} retailers={S.retailers} coverage={S.coverage} onClose={() => {}} />
+    <div className="h-[400px]">
+      <DetailPanel context={{ kind: 'tract', tract: props(uncovered.geoid), metrics: uncovered, stores: [] }} tab="claims" onTab={noop} onClose={noop}
+        claims={[]} games={S.games} retailers={S.retailers} coverage={S.coverage} anchor={S.coverage.dateTo} />
     </div>
   ),
 };

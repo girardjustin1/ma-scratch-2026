@@ -1,6 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './worker';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapGL, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type MapRef, type ViewState } from '@vis.gl/react-maplibre';
 import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl';
 import { circle } from '@turf/turf';
@@ -11,6 +11,7 @@ import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } fro
 import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode } from '../theme/tokens';
 import { fmtInt } from '../lib/format';
 import { Card } from '../components/Basics';
+import { StorePin } from './StorePin';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
 import { TractTooltip } from '../components/TractTooltip';
 
@@ -35,12 +36,56 @@ export interface ClaimsMapProps {
   viewState?: Partial<ViewState>;
   onMove?: (v: ViewState) => void;
   onPinChange?: (p: [number, number]) => void;
-  onSelectTract?: (geoid: string) => void;
+  onSelectTract?: (geoid: string, lngLat: [number, number]) => void;
+  onSelectStore?: (id: string) => void;
+  /** Click on empty map: clear the selection. */
+  onClearSelection?: () => void;
+  /** What is selected, for the highlight. */
+  selection?: MapSelection;
+  /** Card pinned to a map position (follows the map as it moves). */
+  pinned?: { lngLat: [number, number]; node: React.ReactNode } | null;
   height?: number | string;
 }
 
 /** Class of a group's average listed claims per store; picks label ink against its fill. */
 const classOfAvg = (g: { n: number; stores: number }, breaks: number[]) => classOf(g.n / g.stores, breaks);
+
+/**
+ * Which pin names to show: busiest stores claim their label box first; a name that would
+ * overlap an earlier pin or label is dropped (Google Maps does the same). Pins always show.
+ */
+function placeLabels(map: MlMap, stores: Retailer[], counts: Map<string, number>) {
+  const taken: [number, number, number, number][] = [];
+  const hit = (a: [number, number, number, number]) => taken.some((t) => a[0] < t[2] && a[2] > t[0] && a[1] < t[3] && a[3] > t[1]);
+  const keep = new Set<string>();
+  const order = [...stores].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
+  for (const r of order) {
+    const p = map.project([r.lon, r.lat]);
+    const pinW = (counts.get(r.id) ?? 0) > 0 ? 30 : 22;
+    taken.push([p.x - pinW / 2, p.y - pinW * 1.25, p.x + pinW / 2, p.y]); // the pin itself
+  }
+  for (const r of order) {
+    const p = map.project([r.lon, r.lat]);
+    const pinW = (counts.get(r.id) ?? 0) > 0 ? 30 : 22;
+    const w = Math.min(150, r.name.length * 6.6) + 4;
+    const box: [number, number, number, number] = [p.x + pinW / 2, p.y - pinW * 0.95, p.x + pinW / 2 + w, p.y - pinW * 0.35];
+    if (!hit(box)) { taken.push(box); keep.add(r.id); }
+  }
+  return keep;
+}
+
+/** True when a pointer event started on an HTML marker (store pin, pinned card, labels). */
+const onMarker = (ev: Event) => ev.target instanceof Element && !!ev.target.closest('.maplibregl-marker');
+
+export type MapSelection =
+  | { kind: 'store'; id: string }
+  | { kind: 'tract'; geoid: string; lngLat: [number, number] }
+  | null;
+
+/** Zoom at which store bubbles give way to labelled pins, and names appear. */
+const PIN_ZOOM = 14;
+const NAME_ZOOM = 15.3;
+const MAX_PINS = 400;
 
 const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.income[mode] : ramps.claims[mode]);
 
@@ -48,13 +93,19 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const {
     tracts, metrics, metric, breaks, retailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
-    viewState, onMove, onPinChange, onSelectTract, height = '100%',
+    viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
+    height = '100%',
   } = props;
   const mode = useMode();
   const [hover, setHover] = useState<{ x: number; y: number; geoid: string } | null>(null);
   const [groupHover, setGroupHover] = useState<{ x: number; y: number; stores: number; n: number } | null>(null);
   const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
   const mapRef = useRef<MapRef>(null);
+  const [storeHover, setStoreHover] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
+  const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
+  const zoom = viewState?.zoom ?? 10.4;
+  const storeById = useMemo(() => new Map(retailers.map((r) => [r.id, r])), [retailers]);
 
   const byGeoid = useMemo(() => new Map(metrics.map((m) => [m.geoid, m])), [metrics]);
 
@@ -134,6 +185,42 @@ export function ClaimsMap(props: ClaimsMapProps) {
     const zoom = await src.getClusterExpansionZoom(clusterId);
     map.easeTo({ center: lngLat, zoom: zoom + 0.2 });
   };
+  // The pinned card opens below, above, or beside its point, wherever it fits, so it is
+  // never clipped. CARD_H is the tallest card (store card with three recent rows).
+  // Computed after the camera settles (onIdle, and when the card changes), because during a
+  // render the map may still be at its previous position.
+  type A = 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  const [cardAnchor, setCardAnchor] = useState<{ anchor: A; offset: [number, number] }>({ anchor: 'bottom', offset: [0, -18] });
+  const placeCard = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!pinned || !map) return;
+    const CARD_H = 390, CARD_W = 330, GAP = 18;
+    const pt = map.project(pinned.lngLat);
+    const { width, height } = map.getContainer().getBoundingClientRect();
+    const h = pt.x < CARD_W / 2 ? '-left' : pt.x > width - CARD_W / 2 ? '-right' : '';
+    const next: { anchor: A; offset: [number, number] } =
+      height - pt.y >= CARD_H + GAP ? { anchor: `top${h}` as A, offset: [0, GAP] }
+      : pt.y >= CARD_H + GAP ? { anchor: `bottom${h}` as A, offset: [0, -GAP] }
+      // Not enough room above or below: open to the side with more room, vertically centered.
+      : pt.x < width / 2 ? { anchor: 'left', offset: [GAP, 0] } : { anchor: 'right', offset: [-GAP, 0] };
+    setCardAnchor((cur) => (cur.anchor === next.anchor ? cur : next));
+  }, [pinned]);
+  useEffect(() => { placeCard(); }, [placeCard]);
+  const selectedStore = selection?.kind === 'store' ? storeById.get(selection.id) : undefined;
+  const selectedRadius = selectedStore ? bubbleRadii[classOf(claimsByRetailer.get(selectedStore.id) ?? 0, bubbleBreaks)] : 0;
+  // Pins only for stores on screen, winners first, capped so the DOM stays light.
+  const visibleStores = useMemo(() => {
+    if (!bounds || zoom < PIN_ZOOM) return [];
+    const [w, so, e, n] = bounds;
+    return retailers
+      .filter((r) => r.lon >= w && r.lon <= e && r.lat >= so && r.lat <= n)
+      .sort((a, b) => (claimsByRetailer.get(b.id) ?? 0) - (claimsByRetailer.get(a.id) ?? 0))
+      .slice(0, MAX_PINS);
+  }, [bounds, zoom, retailers, claimsByRetailer]);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (map) setLabelIds(placeLabels(map, visibleStores, claimsByRetailer));
+  }, [visibleStores, claimsByRetailer]);
   // Must be referentially stable: a new style object makes MapLibre reload the whole style
   // (every layer) on each render, which flashes the map blank on hover.
   const mapStyle = useMemo(() => baseStyle(mode, basemap), [mode, basemap]);
@@ -154,7 +241,8 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const hoveredProps = hover ? tracts.features.find((f) => f.properties.geoid === hover.geoid)?.properties : undefined;
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    // isolate: pins and cards stack inside the map, never above the panels laid over it.
+    <div className="relative isolate w-full" style={{ height }}>
       <MapGL
         ref={mapRef}
         key={mode /* re-create so the hatch matches the theme */}
@@ -163,31 +251,51 @@ export function ClaimsMap(props: ClaimsMapProps) {
         onMove={onMove ? (e) => onMove(e.viewState) : undefined}
         mapStyle={mapStyle}
         onLoad={onLoad}
-        interactiveLayerIds={showBubbles ? ['group-in', 'tract-fill', 'tract-nodata'] : ['tract-fill', 'tract-nodata']}
-        onIdle={refreshGroupLabels}
+        interactiveLayerIds={showBubbles ? ['group-in', 'store-in', 'store-out', 'tract-fill', 'tract-nodata'] : ['tract-fill', 'tract-nodata']}
+        onIdle={() => {
+          refreshGroupLabels();
+          placeCard();
+          const map = mapRef.current?.getMap();
+          const b = map?.getBounds();
+          if (b) setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+          if (map) setLabelIds(placeLabels(map, visibleStores, claimsByRetailer));
+        }}
         onMouseMove={(e: MapLayerMouseEvent) => {
+          if (onMarker(e.originalEvent)) { setHover(null); setGroupHover(null); setStoreHover(null); return; }
           const f = e.features?.[0];
           if (f?.layer.id === 'group-in') {
             const p = f.properties as { n: number; point_count: number };
-            setHover(null);
+            setHover(null); setStoreHover(null);
             setGroupHover({ x: e.point.x, y: e.point.y, n: p.n, stores: p.point_count });
             return;
           }
-          setGroupHover(null);
+          if (f?.layer.id === 'store-in' || f?.layer.id === 'store-out') {
+            setHover(null); setGroupHover(null);
+            setStoreHover({ x: e.point.x, y: e.point.y, id: String(f.properties?.id) });
+            return;
+          }
+          setGroupHover(null); setStoreHover(null);
           setHover(f ? { x: e.point.x, y: e.point.y, geoid: String(f.properties?.geoid) } : null);
         }}
-        onMouseLeave={() => { setHover(null); setGroupHover(null); }}
+        onMouseLeave={() => { setHover(null); setGroupHover(null); setStoreHover(null); }}
         onClick={(e: MapLayerMouseEvent) => {
+          if (onMarker(e.originalEvent)) return; // pins and the pinned card handle their own clicks
           const f = e.features?.[0];
           if (f?.layer.id === 'group-in') {
             const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
             void expandGroup(Number(f.properties?.cluster_id), [lon, lat]);
             return;
           }
-          if (f && onSelectTract) onSelectTract(String(f.properties?.geoid));
+          if (f?.layer.id === 'store-in' || f?.layer.id === 'store-out') {
+            onSelectStore?.(String(f.properties?.id));
+            return;
+          }
+          if (f) onSelectTract?.(String(f.properties?.geoid), [e.lngLat.lng, e.lngLat.lat]);
+          else onClearSelection?.();
         }}
         onDblClick={(e) => {
           e.preventDefault();
+          if (onMarker(e.originalEvent)) return;
           onPinChange?.([e.lngLat.lng, e.lngLat.lat]);
         }}
         attributionControl={{ compact: true }}
@@ -217,6 +325,13 @@ export function ClaimsMap(props: ClaimsMapProps) {
             filter={['==', ['get', 'lowMatch'], 1]}
             paint={{ 'line-color': status.warning, 'line-width': 1.6, 'line-dasharray': [1.5, 1.5] }}
           />
+          {/* Selected tract: white casing under an ink outline, readable on any fill. */}
+          <Layer id="tract-selected-casing" type="line"
+            filter={['==', ['get', 'geoid'], selection?.kind === 'tract' ? selection.geoid : '']}
+            paint={{ 'line-color': '#ffffff', 'line-width': 5 }} />
+          <Layer id="tract-selected" type="line"
+            filter={['==', ['get', 'geoid'], selection?.kind === 'tract' ? selection.geoid : '']}
+            paint={{ 'line-color': c.ink, 'line-width': 2.5 }} />
         </Source>
         {!coverage.statewide && (
           <Source id="coverage" type="geojson" data={coverageRing}>
@@ -237,6 +352,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             <Layer
               id="hollow-out"
               type="circle"
+              maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
               paint={{
                 'circle-radius': 2.5,
@@ -263,6 +379,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             <Layer
               id="store-out"
               type="circle"
+              maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['>', ['get', 'n'], 0]]}
               layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
               paint={{
@@ -280,6 +397,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             <Layer
               id="hollow-in"
               type="circle"
+              maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
               paint={{
                 'circle-radius': 2.5,
@@ -306,6 +424,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
             <Layer
               id="store-in"
               type="circle"
+              maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['>', ['get', 'n'], 0]]}
               layout={{ 'circle-sort-key': ['-', 0, ['get', 'n']] as never }}
               paint={{
@@ -327,6 +446,32 @@ export function ClaimsMap(props: ClaimsMapProps) {
             </span>
           </Marker>
         ))}
+        {selectedStore && zoom < PIN_ZOOM && (
+          <Source id="selected-store" type="geojson" data={{ type: 'Feature', geometry: { type: 'Point', coordinates: [selectedStore.lon, selectedStore.lat] }, properties: {} }}>
+            <Layer id="selected-store-casing" type="circle"
+              paint={{ 'circle-radius': selectedRadius + 4, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 5 }} />
+            <Layer id="selected-store-ring" type="circle"
+              paint={{ 'circle-radius': selectedRadius + 4, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': c.ink, 'circle-stroke-width': 2.5 }} />
+          </Source>
+        )}
+        {showBubbles && zoom >= PIN_ZOOM && visibleStores.map((r) => {
+          const n = claimsByRetailer.get(r.id) ?? 0;
+          const cls = classOf(n, bubbleBreaks);
+          return (
+            <Marker key={r.id} longitude={r.lon} latitude={r.lat} anchor="bottom-left" offset={[-15, 2]}
+              style={{ zIndex: selection?.kind === 'store' && selection.id === r.id ? 3 : n > 0 ? 2 : 1, opacity: storesInRadius.has(r.id) ? 1 : 0.45 }}>
+              <StorePin n={n} color={bubbles[mode].ramp[cls]} ink={cls >= 2 ? 'light' : 'dark'} name={r.name}
+                showName={zoom >= NAME_ZOOM && (labelIds.has(r.id) || (selection?.kind === 'store' && selection.id === r.id))} selected={selection?.kind === 'store' && selection.id === r.id}
+                onClick={() => onSelectStore?.(r.id)} />
+            </Marker>
+          );
+        })}
+        {pinned && (
+          // Keyed by anchor: the Marker reads `anchor` only when it is created.
+          <Marker key={cardAnchor.anchor} longitude={pinned.lngLat[0]} latitude={pinned.lngLat[1]} anchor={cardAnchor.anchor} offset={cardAnchor.offset} style={{ zIndex: 5 }}>
+            <div className="cursor-default">{pinned.node}</div>
+          </Marker>
+        )}
         <Marker longitude={pin[0]} latitude={pin[1]} anchor="center" style={{ pointerEvents: 'none' }}>
           <span className="relative grid size-4 place-items-center" aria-label="Search pin" role="img">
             <span className="pin-pulse absolute inset-0 rounded-full"
@@ -338,7 +483,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </span>
         </Marker>
       </MapGL>
-      {groupHover && (
+      {groupHover && !pinned && (
         <div className="pointer-events-none absolute z-[2]" style={{ left: groupHover.x + 14, top: groupHover.y + 14 }}>
           <Card className="w-[240px] p-3">
             <p className="text-sm font-semibold text-primary tabular">{fmtInt(groupHover.stores)} stores grouped</p>
@@ -348,7 +493,17 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </Card>
         </div>
       )}
-      {hover && hovered && hoveredProps && (
+      {storeHover && !pinned && storeById.get(storeHover.id) && (
+        <div className="pointer-events-none absolute z-[2]" style={{ left: storeHover.x + 14, top: storeHover.y + 14 }}>
+          <Card className="w-[240px] p-3">
+            <p className="truncate text-sm font-semibold text-primary">{storeById.get(storeHover.id)!.name}</p>
+            <p className="truncate text-xs text-tertiary">{storeById.get(storeHover.id)!.address}</p>
+            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(claimsByRetailer.get(storeHover.id) ?? 0)} listed claims (over $600)</p>
+            <p className="mt-1.5 text-xs text-tertiary">Click for recent claims and actions.</p>
+          </Card>
+        </div>
+      )}
+      {hover && hovered && hoveredProps && !pinned && (
         <div className="pointer-events-none absolute z-[2]" style={{ left: hover.x + 14, top: hover.y + 14 }}>
           <TractTooltip tract={hoveredProps} metrics={hovered} coverage={coverage} />
         </div>
