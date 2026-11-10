@@ -9,6 +9,7 @@ import type {
 } from '../domain/types';
 import census from './census_sample.json';
 import { addDays } from '../lib/format';
+import { LABELS } from '../lib/copy';
 
 function rng(seed: number) {
   return () => {
@@ -23,6 +24,16 @@ const r = rng(20261109);
 const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
 
 export const SAMPLE_CENTER: [number, number] = [-71.08, 42.36];
+
+// The owner's opening pin lives in web/.env.local (VITE_DEFAULT_PIN=lon,lat) and is never
+// committed. Without it, the generic Boston point is used.
+function envPin(): [number, number] | null {
+  const raw = import.meta.env.VITE_DEFAULT_PIN as string | undefined;
+  const [lon, lat] = (raw ?? '').split(',').map(Number);
+  return Number.isFinite(lon) && Number.isFinite(lat) && raw ? [lon, lat] : null;
+}
+export const PIN: [number, number] = envPin() ?? SAMPLE_CENTER;
+const PIN_LABEL = envPin() ? 'your pin' : 'sample pin';
 export const AS_OF = '2026-11-08';
 
 // ---- Tracts & income: REAL public Census data (scripts/build_design_fixture.py) ---
@@ -99,15 +110,15 @@ export const legacyEv: LegacyEv[] = games.slice(0, 14).map((g) => ({
 
 // ---- Coverage & claims -------------------------------------------------------------
 export const coverage: Coverage = {
-  label: '5 mi around sample pin',
-  center: SAMPLE_CENTER,
+  label: `5 mi around ${PIN_LABEL}`,
+  center: PIN,
   radiusMiles: 5,
   dateFrom: addDays(AS_OF, -20),
   dateTo: AS_OF,
 };
 
 const coveredRetailers = retailers.filter(
-  (x) => distance(point([x.lon, x.lat]), point(SAMPLE_CENTER), { units: 'miles' }) <= coverage.radiusMiles,
+  (x) => distance(point([x.lon, x.lat]), point(PIN), { units: 'miles' }) <= coverage.radiusMiles,
 );
 const AMOUNTS = [600, 600, 600, 700, 800, 1000, 1000, 1000, 2000, 2500, 5000, 10000, 10000, 25000, 50000, 100000, 1000000];
 
@@ -132,7 +143,7 @@ export const defaultFilters: Filters = {
   gameIds: [],
   prices: [],
   prizeBand: 'all',
-  pin: SAMPLE_CENTER,
+  pin: PIN,
   radiusMiles: 5,
 };
 
@@ -183,7 +194,7 @@ export const mlGate = {
 };
 
 export const sources = [
-  { id: 'claims', label: 'Listed claims ($600+)', origin: 'Mass Lottery', lastFetched: AS_OF, rows: 360 },
+  { id: 'claims', label: LABELS.listedClaims, origin: 'Mass Lottery', lastFetched: AS_OF, rows: 360 },
   { id: 'games', label: 'Games and prizes remaining', origin: 'Mass Lottery', lastFetched: AS_OF, rows: games.length },
   { id: 'retailers', label: 'Licensed retailers', origin: 'Mass Lottery', lastFetched: '2026-11-01', rows: retailers.length },
   { id: 'income', label: 'Median household income', origin: 'Census Bureau ACS', lastFetched: '2026-10-15', rows: tractIncome.length },
