@@ -1,21 +1,24 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlaceDetails, PlaceDetailsView, type PlaceViewState } from '../components/PlaceDetails';
+import { PlaceDetailsView, type PlaceViewState } from '../components/PlaceDetails';
 import type { PlaceResult } from '../data/googlePlaces';
 import type { Retailer } from '../domain/types';
 
 // SYNTHETIC fixtures only: a made-up store, made-up address and made-up Google fields.
 // Photos and Street View have no src, so they render as grey placeholder boxes.
+// The container (PlaceDetails) is not shown: it calls the dev-server proxy, which Storybook lacks.
 
 const store: Retailer = {
   id: 'R-DEMO-1',
   name: 'SAMPLE CORNER MARKET #12',
-  address: '100 Example Street',
-  town: 'Sampleton',
+  address: '100 EXAMPLE ST',
+  town: 'SAMPLETON',
   lon: -71.1,
   lat: 42.35,
   tractGeoid: '25000000000',
 };
 
+// Google separates times with thin spaces and a narrow no-break space before AM/PM.
+const t = (s: string) => s.replace(/ (AM|PM)/g, ' $1').replace(/ – /g, ' – ');
 const week = [
   'Monday: 6:00 AM – 10:00 PM',
   'Tuesday: 6:00 AM – 10:00 PM',
@@ -24,7 +27,12 @@ const week = [
   'Friday: 6:00 AM – 11:00 PM',
   'Saturday: 7:00 AM – 11:00 PM',
   'Sunday: 8:00 AM – 9:00 PM',
-];
+].map(t);
+
+/** Wednesday 11 Nov 2026 at 3:00 PM, so the hours line is the same on every run. */
+const afternoon = new Date(2026, 10, 11, 15, 0);
+/** Same day, 11:30 PM: after closing. */
+const lateNight = new Date(2026, 10, 11, 23, 30);
 
 const loaded: PlaceResult = {
   ok: true,
@@ -37,11 +45,11 @@ const loaded: PlaceResult = {
   nameSimilarity: 1,
   matchConfidence: 'high',
   googleMapsUri: 'https://www.google.com/maps/search/?api=1&query=Sample%20Corner%20Market',
-  websiteUri: 'https://example.com/',
+  websiteUri: 'https://www.example.com/store/12',
   phone: '(555) 010-0100',
   phoneInternational: '+1 555-010-0100',
   rating: 4.2,
-  ratingCount: 87,
+  ratingCount: 1287,
   businessStatus: 'OPERATIONAL',
   openNow: true,
   weekdayHours: week,
@@ -63,11 +71,11 @@ const lowMatch: PlaceResult = {
   nameSimilarity: 0.33,
   matchConfidence: 'low',
   openNow: false,
-  rating: undefined,
-  ratingCount: undefined,
+  rating: 3.6,
+  ratingCount: 42,
   websiteUri: undefined,
   photos: [],
-  streetView: { status: 'ZERO_RESULTS', available: false },
+  streetView: { status: 'OK', available: true, date: '2023-09', copyright: '© Sample' },
 };
 
 const sparse: PlaceResult = {
@@ -87,25 +95,20 @@ const sparse: PlaceResult = {
 const meta: Meta<typeof PlaceDetailsView> = {
   title: 'Components/Place details',
   component: PlaceDetailsView,
-  args: { store },
+  args: { store, now: afternoon },
   decorators: [(Story) => <div className="w-[420px] max-w-full bg-primary p-5"><Story /></div>],
 };
 export default meta;
 type Story = StoryObj<typeof PlaceDetailsView>;
 
-const s = (state: PlaceViewState): Story => ({ args: { state, onRetry: () => {} } });
+const s = (state: PlaceViewState, now = afternoon): Story => ({ args: { state, now, onRetry: () => {} } });
 
 export const Loaded = s({ kind: 'loaded', result: loaded });
-export const LowConfidence = s({ kind: 'loaded', result: lowMatch });
+/** No photos, so Street View is the hero; closed after hours. */
+export const LowConfidence = s({ kind: 'loaded', result: lowMatch }, lateNight);
 export const SparseAndTemporarilyClosed = s({ kind: 'loaded', result: sparse });
 export const Loading = s({ kind: 'loading' });
-export const Offline = s({ kind: 'offline' });
 export const NoKey = s({ kind: 'error', error: { ok: false, kind: 'no_key' } });
 export const NotFound = s({ kind: 'error', error: { ok: false, kind: 'not_found' } });
 export const HttpError = s({ kind: 'error', error: { ok: false, kind: 'http', status: 403, detail: 'PERMISSION_DENIED' } });
 export const NetworkError = s({ kind: 'error', error: { ok: false, kind: 'offline' } });
-
-/** The container with online off: shows the offline state without touching the network. */
-export const ContainerOffline: StoryObj<typeof PlaceDetails> = {
-  render: () => <PlaceDetails store={store} online={false} />,
-};
