@@ -3,20 +3,22 @@ import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { distance, point } from '@turf/turf';
-import { countBreaks, quantileBreaks } from '../domain/classify';
+import { claimCountBreaks, classOf, quantileBreaks, storeCountBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
   Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
 } from '../domain/types';
 import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
+import type { EvData } from '../data/localView';
 import type { Basemap } from '../map/mapStyle';
 import { CoverageChip } from '../components/Basics';
-import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
-import { MapLegend } from '../components/MapLegend';
+import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../components/Controls';
+import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
-import { StoreCard, TractCard, type PanelTab } from '../components/SelectionCard';
+import { Playback, WINDOW_DAYS, type PlayMode } from '../components/Playback';
+import { StoreCard, TractCard, type PanelTab, type StoreTrend, type TrendWindow } from '../components/SelectionCard';
 import { PlaceDetails } from '../components/PlaceDetails';
-import { fmtInt } from '../lib/format';
+import { addDays, daysBetween, fmtDate, fmtInt } from '../lib/format';
 import { LABELS } from '../lib/copy';
 
 export interface ExploreData {
@@ -28,6 +30,8 @@ export interface ExploreData {
   coverage: Coverage;
   /** Per-town matching outcome; only present for real data. */
   townMatch?: Record<string, TownMatch>;
+  /** Real statewide EV inputs for the EV tab; only present for real data. */
+  ev?: EvData;
 }
 
 export interface ExplorePageProps {
@@ -38,6 +42,19 @@ export interface ExplorePageProps {
   initialSelected?: string;
   online?: boolean;
   initialBasemap?: Basemap;
+}
+
+/** First index with ds[i] > d (ds sorted ascending ISO dates). */
+function upperBound(ds: string[], d: string) {
+  let lo = 0, hi = ds.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ds[m] <= d) lo = m + 1; else hi = m; }
+  return lo;
+}
+/** First index with ds[i] >= d. */
+function lowerBound(ds: string[], d: string) {
+  let lo = 0, hi = ds.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ds[m] < d) lo = m + 1; else hi = m; }
+  return lo;
 }
 
 /** Listed claims per game inside the radius, ignoring the game and price filters. */
@@ -57,7 +74,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
     const metrics = computeTractMetrics({ ...data, claims, filters });
     const shown = metrics.filter((m) => m.inRadius);
     const values = shown.map((m) => metricValue(m, metric)).filter((v): v is number => v !== null);
-    const breaks = metric === 'claims' ? countBreaks(values, 5) : quantileBreaks(values, 5);
+    const breaks = metric === 'claims' ? claimCountBreaks(values) : quantileBreaks(values, 5);
     const claimsByRetailer = new Map<string, number>();
     for (const c of claims) claimsByRetailer.set(c.retailerId, (claimsByRetailer.get(c.retailerId) ?? 0) + 1);
     // Store classes for the bubbles: quantile breaks over in-radius stores with listed claims,
@@ -67,8 +84,15 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
       data.retailers.filter((r) => distance(point([r.lon, r.lat]), here, { units: 'miles' }) <= filters.radiusMiles).map((r) => r.id),
     );
     const storeCounts = [...storesInRadius].map((id) => claimsByRetailer.get(id) ?? 0).filter((n) => n > 0);
+    // "Hottest" stores: the top 3% of in-radius stores with listed claims, always above the
+    // top class's lower edge. null when there are too few stores for a top 3% to mean much.
+    const sortedCounts = [...storeCounts].sort((x, y) => x - y);
+    const storeBreaks = storeCountBreaks(storeCounts);
+    const p97 = sortedCounts.length >= 30 ? sortedCounts[Math.floor(0.97 * (sortedCounts.length - 1))] : null;
+    const hotMin = p97 === null ? null : Math.max(p97, (storeBreaks[storeBreaks.length - 1] ?? 0) + 2);
     const bubbleScale = {
-      breaks: countBreaks(storeCounts, 5),
+      hotMin,
+      breaks: storeBreaks,
       min: storeCounts.length ? Math.min(...storeCounts) : 0,
       max: storeCounts.length ? Math.max(...storeCounts) : 0,
       stores: storeCounts.length,
@@ -96,17 +120,70 @@ export function ExplorePage({
     const f = initialSelected ? data.tracts.features.find((t) => t.properties.geoid === initialSelected) : undefined;
     return f ? { kind: 'tract', geoid: f.properties.geoid, lngLat: f.properties.centroid } : null;
   });
+  // Store key: classes switched off in the legend, and the map's visible bounds.
+  const [hiddenClasses, setHiddenClasses] = useState<Set<number>>(new Set());
+  const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected ? 'claims' : null);
   const [layers, setLayers] = useState({ tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
   const [view, setView] = useState<Partial<ViewState>>({
     longitude: data.coverage.center[0], latitude: data.coverage.center[1], zoom: 10.4,
   });
 
+  // Playback: the map shows listed claims up to playDate (Grow) or the 30 days to it, while
+  // class breaks and bubble sizes keep the full range's scale so growth is visible.
+  const [playDate, setPlayDate] = useState<string | null>(null);
+  const [playMode, setPlayMode] = useState<PlayMode>('grow');
   const a = useLayer(data, filters, metric);
   const b = useLayer(data, filters, metricB);
+  // Each store's listed dates, sorted, indexed once when playback starts; every frame then
+  // counts by binary search instead of refiltering every claim.
+  const playing = playDate !== null;
+  const storeDates = useMemo(() => {
+    if (!playing) return null;
+    const m = new Map<string, string[]>();
+    for (const c of a.claims) {
+      const list = m.get(c.retailerId);
+      if (list) list.push(c.listedDate); else m.set(c.retailerId, [c.listedDate]);
+    }
+    for (const v of m.values()) v.sort();
+    return m;
+  }, [playing, a.claims]);
+  const playCounts = useMemo(() => {
+    if (!storeDates || !playDate) return null;
+    const from = playMode === 'window' ? addDays(playDate, -(WINDOW_DAYS - 1)) : null;
+    const out = new Map<string, number>();
+    for (const [id, ds] of storeDates) {
+      const n = upperBound(ds, playDate) - (from ? lowerBound(ds, from) : 0);
+      if (n > 0) out.set(id, n);
+    }
+    return out;
+  }, [storeDates, playDate, playMode]);
+  // Bubbles use the playback counts; tracts, legend classes and sizes keep the full range.
+  const storeCounts = playCounts ?? a.claimsByRetailer;
+  const playInRadius = playCounts ? [...a.storesInRadius].reduce((s2, id) => s2 + (playCounts.get(id) ?? 0), 0) : null;
   // What is selected: a store or a tract, its listed claims under the current filters, and
   // the end of the date filter that "recent" counts back from.
   const anchor = filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo;
+  // Trending over the selected listed-date range: the later half vs the earlier half, under
+  // the other filters. Trending = at least `min` in the later half and at least double the
+  // earlier half; `min` scales with the half's length (8 per 90 days, never under 3).
+  const trendWindow = useMemo((): TrendWindow => {
+    const from = filters.dateFrom > data.coverage.dateFrom ? filters.dateFrom : data.coverage.dateFrom;
+    const half = Math.max(1, Math.floor((daysBetween(from, anchor) + 1) / 2));
+    const recentFrom = addDays(anchor, -(half - 1));
+    return { priorFrom: addDays(recentFrom, -half), priorTo: addDays(recentFrom, -1), recentFrom, recentTo: anchor,
+      min: Math.max(3, Math.round((8 * half) / 90)) };
+  }, [filters.dateFrom, data.coverage.dateFrom, anchor]);
+  const trend = useMemo(() => {
+    const out = new Map<string, StoreTrend>();
+    for (const c of filterClaims(data.claims, data.games, { ...filters, dateFrom: trendWindow.priorFrom, dateTo: anchor }, data.coverage)) {
+      const t = out.get(c.retailerId) ?? { recent: 0, prior: 0, trending: false };
+      if (c.listedDate >= trendWindow.recentFrom) t.recent += 1; else t.prior += 1;
+      out.set(c.retailerId, t);
+    }
+    for (const t of out.values()) t.trending = t.recent >= trendWindow.min && t.recent >= 2 * Math.max(t.prior, 1);
+    return out;
+  }, [data, filters, anchor, trendWindow]);
   const selStore = selection?.kind === 'store' ? data.retailers.find((r) => r.id === selection.id) : undefined;
   const selGeoid = selection?.kind === 'tract' ? selection.geoid : selStore?.tractGeoid;
   const selTract = data.tracts.features.find((f) => f.properties.geoid === selGeoid)?.properties;
@@ -116,6 +193,24 @@ export function ExplorePage({
     ? a.claims.filter((c) => c.retailerId === selStore.id)
     : (() => { const ids = new Set(tractStores.map((r) => r.id)); return a.claims.filter((c) => ids.has(c.retailerId)); })();
   const clear = () => { setSelection(null); setPanelTab(null); };
+
+  // Stores in the current view (respecting the claims-per-store slider), busiest first.
+  const [lo, hi] = filters.storeClaims ?? [0, STORE_CLAIMS_MAX];
+  const inView: StoreInView[] = !bounds ? [] : data.retailers
+    .filter((r) => r.lon >= bounds[0] && r.lon <= bounds[2] && r.lat >= bounds[1] && r.lat <= bounds[3])
+    .map((r) => {
+      const n = storeCounts.get(r.id) ?? 0;
+      const hot = a.bubbleScale.hotMin !== null && n >= a.bubbleScale.hotMin;
+      return { id: r.id, name: r.name, town: r.town, n, cls: hot ? 5 : n > 0 ? classOf(n, a.bubbleScale.breaks) : -1, trend: trend.get(r.id) };
+    })
+    .filter((st) => st.n >= lo && (hi >= STORE_CLAIMS_MAX || st.n <= hi))
+    .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name));
+  const storeControls: StoreKeyControls = {
+    inView, hidden: hiddenClasses, trendWindow,
+    onToggle: (cls) => setHiddenClasses((h) => { const n = new Set(h); if (n.has(cls)) n.delete(cls); else n.add(cls); return n; }),
+    onShowAll: () => setHiddenClasses(new Set()),
+    onSelectStore: (id) => selectStore(id),
+  };
   const selectStore = (id: string) => { setSelection({ kind: 'store', id }); setPanelTab((t) => (t ? (t === 'stores' ? 'claims' : t) : null)); };
   const zoomTo = (lngLat: [number, number], zoom: number) => setView({ ...view, longitude: lngLat[0], latitude: lngLat[1], zoom });
 
@@ -124,7 +219,7 @@ export function ExplorePage({
     if (selStore) {
       return {
         lngLat: [selStore.lon, selStore.lat] as [number, number],
-        node: <StoreCard store={selStore} claims={selClaims} games={data.games} anchor={anchor}
+        node: <StoreCard store={selStore} claims={selClaims} games={data.games} anchor={anchor} trend={trend.get(selStore.id)} trendWindow={trendWindow}
           onOpen={setPanelTab} onZoom={() => zoomTo([selStore.lon, selStore.lat], 16)} onClose={clear} />,
       };
     }
@@ -151,6 +246,7 @@ export function ExplorePage({
     onPinChange: (pin: [number, number]) => setFilters({ ...filters, pin }),
     selection,
     storeRange: filters.storeClaims,
+    hiddenClasses,
     onSelectTract: (geoid: string, lngLat: [number, number]) => setSelection({ kind: 'tract', geoid, lngLat }),
     onSelectStore: selectStore,
     onClearSelection: clear,
@@ -173,7 +269,7 @@ export function ExplorePage({
           <div className="flex-1" />
           <CoverageChip coverage={data.coverage} />
           <p className="text-xs text-tertiary tabular">
-            {fmtInt(a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius · {fmtInt(covered)} covered tracts
+            {fmtInt(playInRadius ?? a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius{playDate ? ` through ${fmtDate(playDate)}` : ''} · {fmtInt(covered)} covered tracts
           </p>
         </div>
         <FilterBar
@@ -184,9 +280,13 @@ export function ExplorePage({
       <div className="flex min-h-0 flex-1">
       <div className="grid min-h-0 min-w-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
         <div className="relative min-h-0">
-          <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={a.claimsByRetailer}
-            storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks}
-            viewState={view} onMove={setView} pinned={pinned} />
+          <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={storeCounts} playing={playing}
+            storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
+            viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds} />
+          <div className="absolute bottom-7 left-3 z-10">
+            <Playback from={filters.dateFrom} to={filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo}
+              value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
+          </div>
           {!compare && (
             <div className={controlsBox}>
               <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />
@@ -194,7 +294,7 @@ export function ExplorePage({
           )}
           <div className={legendBox}>
             <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
-              bubbles={layers.showBubbles ? a.bubbleScale : undefined} />
+              bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined} />
           </div>
           <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
             Click a store or tract for recent claims and actions · double-click to move the pin
@@ -203,7 +303,7 @@ export function ExplorePage({
         {compare && (
           <div className="relative min-h-0">
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
-              storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks}
+              storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks} hotMin={b.bubbleScale.hotMin}
               viewState={view} onMove={setView} />
             <div className={controlsBox}>
               <div className="rounded-lg bg-primary p-1 shadow-xs ring-1 ring-secondary"><MetricSwitcher value={metricB} onChange={setMetricB} /></div>

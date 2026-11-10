@@ -13,13 +13,14 @@ import { Input } from '@/components/base/input/input';
 import { Select } from '@/components/base/select/select';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { cx } from '@/utils/cx';
-import type { GameRef } from '../domain/types';
+import type { GameRef, PrizeBand } from '../domain/types';
+import { BUCKETS, bucketForBand, type BucketId } from '../domain/prizeBuckets';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
 import { CaveatNote } from './Basics';
 import { Chip } from './Chip';
 
-export type GameSort = 'unclaimed' | 'top' | 'claims' | 'newest' | 'name';
+export type GameSort = 'unclaimed' | 'payback' | 'top' | 'claims' | 'newest' | 'name';
 
 // ---- Filter chips --------------------------------------------------------------------
 // Chips narrow the list only; the map changes when games are selected. Within a facet the
@@ -101,7 +102,8 @@ function passesFacets(g: GameRef, facets: Facet[], sel: FacetSelection, ctx: Fac
 
 const SORTS: { value: GameSort; label: string }[] = [
   { value: 'unclaimed', label: 'Most unclaimed prizes over $600' },
-  { value: 'top', label: 'Most top prizes left' },
+  { value: 'payback', label: 'Highest estimated payback (statewide EV)' },
+  { value: 'top', label: 'Most prizes left (column below)' },
   { value: 'claims', label: 'Most listed claims in radius' },
   { value: 'newest', label: 'Newest launch' },
   { value: 'name', label: 'Name' },
@@ -110,6 +112,17 @@ const SORTS: { value: GameSort; label: string }[] = [
 /** Price filter value for games the catalog has no price for (matches filterClaims). */
 export const UNKNOWN_PRICE = -1;
 const nameKey = (n: string) => n.replace(/^[$\d,.\s]+/, '').trim() || n;
+
+/** Prizes left in a bucket; the top-prize bucket falls back to the catalog summary. */
+function leftOf(g: GameRef, bucket: BucketId) {
+  return g.buckets?.[bucket]?.left ?? (bucket === 'top' ? g.prizes?.topRemaining : undefined);
+}
+const BUCKET_SHORT: Record<BucketId, string> = {
+  top: 'Top prize', b100k: '$100K+', b10k: '$10K–$99K', b1k: '$1K–$9.9K', b601: '$601–$999', small: '≤ $600',
+};
+const BUCKET_COLUMN: Record<BucketId, string> = {
+  top: 'top prizes left', b100k: '$100K+ left', b10k: '$10K–$99K left', b1k: '$1K–$9.9K left', b601: '$601–$999 left', small: '$600 & under left',
+};
 
 /** Search, on-sale and the Ticket price filter: the base every chip count starts from. */
 function baseFilter(games: GameRef[], query: string, onSaleOnly: boolean, prices: number[]) {
@@ -127,8 +140,9 @@ export function arrangeGames(args: {
   games: GameRef[]; sort: GameSort; query: string; onSaleOnly: boolean; prices: number[];
   claimCounts: Map<string, number>; groupByPrice: boolean;
   facets?: { list: Facet[]; selection: FacetSelection; ctx: FacetCtx };
+  bucket?: BucketId;
 }) {
-  const { games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice, facets } = args;
+  const { games, sort, query, onSaleOnly, prices, claimCounts, groupByPrice, facets, bucket = 'top' } = args;
   const shown = baseFilter(games, query, onSaleOnly, prices).filter(
     (g) => !facets || passesFacets(g, facets.list, facets.selection, facets.ctx),
   );
@@ -136,7 +150,8 @@ export function arrangeGames(args: {
   const desc = (a: number | null | undefined, b: number | null | undefined) => (b ?? -Infinity) - (a ?? -Infinity);
   const cmp: Record<GameSort, (a: GameRef, b: GameRef) => number> = {
     unclaimed: (a, b) => desc(a.prizes?.remainingOver600, b.prizes?.remainingOver600),
-    top: (a, b) => desc(a.prizes?.topRemaining, b.prizes?.topRemaining) || desc(a.prizes?.topPrize, b.prizes?.topPrize),
+    payback: (a, b) => desc(a.ev?.payback, b.ev?.payback),
+    top: (a, b) => desc(leftOf(a, bucket), leftOf(b, bucket)) || desc(a.prizes?.topPrize, b.prizes?.topPrize),
     claims: (a, b) => desc(claimCounts.get(a.id), claimCounts.get(b.id)),
     newest: (a, b) => (b.launchDate ?? '').localeCompare(a.launchDate ?? ''),
     name: () => 0,
@@ -213,10 +228,10 @@ function Metric({ value, label, muted }: { value: string; label: string; muted?:
 }
 
 /** Ticket art at 2:1, or a gray placeholder with a ticket icon when there is none. */
-function TicketThumb({ src }: { src?: string | null }) {
+export function TicketThumb({ src, className }: { src?: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   return (
-    <span className="grid h-9 w-[72px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset">
+    <span className={cx('grid h-9 w-[72px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset', className)}>
       {src && !failed
         ? <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
         : <Ticket01 className="size-4 text-fg-quaternary" aria-hidden />}
@@ -224,7 +239,7 @@ function TicketThumb({ src }: { src?: string | null }) {
   );
 }
 
-function GameRow({ g, claims }: { g: GameRef; claims: number }) {
+function GameRow({ g, claims, sort, bucket }: { g: GameRef; claims: number; sort: GameSort; bucket: BucketId }) {
   const p = g.prizes;
   const meta = [
     g.price != null ? `$${g.price}` : 'Price unknown',
@@ -251,8 +266,14 @@ function GameRow({ g, claims }: { g: GameRef; claims: number }) {
             </div>
             <AriaText slot="description" className="block truncate text-xs text-tertiary">{meta}</AriaText>
           </div>
-          <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />
-          <Metric value={p ? `${fmtInt(p.topRemaining)} of ${fmtInt(p.topTotal)}` : '—'} label="top prizes left" muted={!p} />
+          {sort === 'payback'
+            ? <Metric value={g.ev ? `${Math.round(g.ev.payback * 100)}%` : '—'}
+                label={g.ev?.checkInputs ? 'check inputs' : 'est. payback / $1'} muted={!g.ev} />
+            : <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />}
+          {(() => {
+            const c = g.buckets?.[bucket] ?? (bucket === 'top' && p ? { left: p.topRemaining, total: p.topTotal } : null);
+            return <Metric value={c && c.total > 0 ? `${fmtInt(c.left)} of ${fmtInt(c.total)}` : '—'} label={BUCKET_COLUMN[bucket]} muted={!c || c.total === 0} />;
+          })()}
           <Metric value={fmtInt(claims)} label="listed in radius" muted={claims === 0} />
         </>
       )}
@@ -267,6 +288,8 @@ export interface GamePickerProps {
   /** The map's ticket-price filter, shown and edited as the Price chips. */
   prices: number[];
   onPricesChange?: (prices: number[]) => void;
+  /** The map's Prize size filter: the prizes-left column starts on the matching bucket. */
+  prizeBand?: PrizeBand;
   /** Listed claims per game inside the radius, under the current date and prize filters. */
   claimCounts: Map<string, number>;
 }
@@ -275,13 +298,16 @@ export interface GamePickerProps {
  * Game filter for the map: search, on-sale toggle, sort, and grouping by ticket price.
  * Unclaimed-prize counts are statewide and never imply what any store holds.
  */
-export function GamePicker({ games, value, onChange, prices, onPricesChange, claimCounts }: GamePickerProps) {
+export function GamePicker({ games, value, onChange, prices, onPricesChange, claimCounts, prizeBand = 'all' }: GamePickerProps) {
   const labelId = useId();
   const [query, setQuery] = useState('');
   const hasSaleInfo = games.some((g) => g.onSale !== undefined);
   const [onSaleOnly, setOnSaleOnly] = useState(hasSaleInfo);
   const [sort, setSort] = useState<GameSort>(games.some((g) => g.prizes) ? 'unclaimed' : 'claims');
   const [groupByPrice, setGroupByPrice] = useState(true);
+  // Which prize bucket the "left" column shows; follows the Prize size filter until changed here.
+  const [bucketPick, setBucketPick] = useState<BucketId | null>(null);
+  const bucket = bucketPick ?? bucketForBand(prizeBand);
   // Price chips are the map's ticket-price filter (they change the map); every other chip
   // only narrows this list. The local state holds the non-price chips.
   const [localSel, setLocalSel] = useState<FacetSelection>({});
@@ -307,9 +333,9 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
   const { total, groups } = useMemo(
     () => arrangeGames({
       games, sort, query, onSaleOnly, prices: [], claimCounts, groupByPrice,
-      facets: { list: facetList, selection, ctx },
+      facets: { list: facetList, selection, ctx }, bucket,
     }),
-    [games, sort, query, onSaleOnly, claimCounts, groupByPrice, facetList, selection, ctx],
+    [games, sort, query, onSaleOnly, claimCounts, groupByPrice, facetList, selection, ctx, bucket],
   );
   const onSaleCount = games.filter((g) => g.onSale).length;
   const shownIds = groups.flatMap((gr) => gr.games.map((g) => g.id));
@@ -318,7 +344,7 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
   const display =
     value.length === 0 ? (prices.length ? `All ${priceText} games` : 'All games') : value.length === 1 ? (games.find((g) => g.id === value[0])?.name ?? '1 game') : `${value.length} games`;
 
-  const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} />);
+  const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} sort={sort} bucket={bucket} />);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -375,6 +401,15 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
                       {(item) => <Select.Item id={item.id} label={item.label} />}
                     </Select>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-tertiary">Prizes-left column:</span>
+                    <ButtonGroup size="sm" aria-label="Prizes-left column" disallowEmptySelection selectedKeys={[bucket]}
+                      onSelectionChange={(k) => { const v = [...k][0]; if (v) setBucketPick(v as BucketId); }}>
+                      {BUCKETS.map((b) => (
+                        <ButtonGroupItem key={b.id} id={b.id} className="selected:bg-tertiary selected:text-primary">{BUCKET_SHORT[b.id]}</ButtonGroupItem>
+                      ))}
+                    </ButtonGroup>
+                  </div>
                   <div className="border-t border-secondary pt-3">
                     <FilterChips facets={facetList} selection={selection} setSelection={setSelection} counts={counts} />
                   </div>
@@ -401,6 +436,12 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
                   )}
                 </AriaListBox>
                 <div className="flex flex-col gap-3 p-4">
+                  {sort === 'payback' && (
+                    <CaveatNote dense>
+                      {CAVEATS.evBanner} Estimated from the prize table (PRD formula); anything over 100% is flagged “check
+                      inputs” and usually reflects estimation limits. Full detail on the Statewide EV tab.
+                    </CaveatNote>
+                  )}
                   <CaveatNote dense>
                     {CAVEATS.unclaimedPrizes}{asOf ? ` Prize table as of ${fmtDate(asOf)}.` : ''} “—” means no prize table for that game.
                   </CaveatNote>

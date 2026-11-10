@@ -18,12 +18,37 @@ export function countBreaks(values: number[], k = 5): number[] {
   return [...new Set(quantileBreaks(values, k).map(Math.round))].sort((a, b) => a - b);
 }
 
-/** Legend label per class. Counts read "3 – 7" with no overlap between classes. */
-export function classLabels(breaks: number[], min: number, max: number, integer: boolean, fmt: (v: number) => string) {
+/**
+ * Breaks for listed-claim counts. Quantiles collapse when most tracts have 0 or 1 claims
+ * (narrow filters), leaving only 3–4 classes; then fixed breaks give the full five:
+ * 0 · 1 · 2–3 · 4–9 · 10+.
+ */
+export function claimCountBreaks(values: number[]): number[] {
+  const q = countBreaks(values, 5);
+  const max = values.length ? Math.max(...values) : 0;
+  return q.length >= 4 || max < 10 ? q : [0, 1, 3, 9];
+}
+
+/**
+ * Breaks for listed claims per store (stores with at least one). Same idea as
+ * claimCountBreaks: when quantiles collapse, fixed classes 1 · 2 · 3–4 · 5–9 · 10+.
+ */
+export function storeCountBreaks(values: number[]): number[] {
+  const q = countBreaks(values, 5);
+  const max = values.length ? Math.max(...values) : 0;
+  return q.length >= 4 || max < 10 ? q : [1, 2, 4, 9];
+}
+
+/**
+ * Legend label per class. Counts read "3 – 7" with no overlap between classes; with
+ * openTop the last class reads "10+" instead of running to the current maximum.
+ */
+export function classLabels(breaks: number[], min: number, max: number, integer: boolean, fmt: (v: number) => string, openTop = false) {
   const edges = [min, ...breaks, max];
   return edges.slice(0, -1).map((lo, i) => {
     const from = integer && i > 0 ? lo + 1 : lo;
     const to = edges[i + 1];
+    if (openTop && i === edges.length - 2 && i > 0) return `${fmt(from)}+`;
     return integer && from >= to ? fmt(to) : `${fmt(from)} – ${fmt(to)}`;
   });
 }

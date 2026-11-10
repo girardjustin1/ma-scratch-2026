@@ -202,7 +202,7 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset,
       />
       <GamePicker
         games={games} value={filters.gameIds} onChange={(gameIds) => set({ gameIds })}
-        prices={filters.prices} onPricesChange={(prices) => set({ prices })}
+        prices={filters.prices} onPricesChange={(prices) => set({ prices })} prizeBand={filters.prizeBand}
         claimCounts={claimCounts ?? NO_COUNTS}
       />
       <Select

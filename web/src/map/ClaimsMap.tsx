@@ -9,12 +9,9 @@ import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
 import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode } from '../theme/tokens';
-import { fmtInt } from '../lib/format';
-import { Card } from '../components/Basics';
 import { StorePin } from './StorePin';
 import { STORE_CLAIMS_MAX } from '../components/Controls';
 import { baseStyle, hatchImage, type Basemap } from './mapStyle';
-import { TractTooltip } from '../components/TractTooltip';
 
 export interface ClaimsMapProps {
   tracts: TractCollection;
@@ -29,6 +26,18 @@ export interface ClaimsMapProps {
   bubbleBreaks: number[];
   /** Only stores whose listed claims fall in [min, max] are drawn; max >= storeRangeTop means no cap. */
   storeRange?: [number, number];
+  /**
+   * Playback is running: every store is its own bubble (no groups, so nothing pops in and
+   * out), sizes grow continuously with the running count, and stores appear at their first
+   * listed claim.
+   */
+  playing?: boolean;
+  /** Listed claims at or above which a store is "hottest" (🔥); null = none. */
+  hotMin?: number | null;
+  /** Store classes switched off in the legend (0–4 by bubbleBreaks; 5 = hottest; -1 = no listed claims). */
+  hiddenClasses?: Set<number>;
+  /** Called with the visible bounds [west, south, east, north] whenever the map settles. */
+  onBounds?: (b: [number, number, number, number]) => void;
   coverage: Coverage;
   pin: [number, number];
   radiusMiles: number;
@@ -95,23 +104,25 @@ const rampFor = (metric: MetricKey, mode: Mode) => (metric === 'income' ? ramps.
 export function ClaimsMap(props: ClaimsMapProps) {
   const {
     tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
-    storeRange = [0, STORE_CLAIMS_MAX],
+    storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds, hotMin = null, playing = false,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
     viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
     height = '100%',
   } = props;
   const mode = useMode();
-  const [hover, setHover] = useState<{ x: number; y: number; geoid: string } | null>(null);
-  const [groupHover, setGroupHover] = useState<{ x: number; y: number; stores: number; n: number } | null>(null);
-  const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number }[]>([]);
+  const [cursor, setCursor] = useState('grab');
+  const [groupLabels, setGroupLabels] = useState<{ id: number; lon: number; lat: number; n: number; stores: number; hot: number }[]>([]);
+  const [hotSingles, setHotSingles] = useState<{ id: string; lon: number; lat: number; n: number }[]>([]);
   const mapRef = useRef<MapRef>(null);
   // Stores in the claims-per-store range: bubbles, groups and pins all draw from this list.
   const [lo, hi] = storeRange;
   const retailers = useMemo(() => allRetailers.filter((r) => {
     const n = claimsByRetailer.get(r.id) ?? 0;
+    const cls = hotMin !== null && n >= hotMin ? 5 : n > 0 ? classOf(n, bubbleBreaks) : -1;
+    if (hiddenClasses?.size && hiddenClasses.has(cls)) return false;
     return n >= lo && (hi >= STORE_CLAIMS_MAX || n <= hi);
-  }), [allRetailers, claimsByRetailer, lo, hi]);
-  const [storeHover, setStoreHover] = useState<{ x: number; y: number; id: string } | null>(null);
+  }), [allRetailers, claimsByRetailer, lo, hi, hiddenClasses, bubbleBreaks, hotMin]);
+  const isHot = (n: number) => hotMin !== null && n >= hotMin;
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const zoom = viewState?.zoom ?? 10.4;
@@ -145,7 +156,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     const toFeature = (r: Retailer) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [r.lon, r.lat] },
-      properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0 },
+      properties: { id: r.id, n: claimsByRetailer.get(r.id) ?? 0, hot: isHot(claimsByRetailer.get(r.id) ?? 0) ? 1 : 0 },
     });
     const inside = retailers.filter((r) => storesInRadius.has(r.id)).map(toFeature);
     const outside = retailers.filter((r) => !storesInRadius.has(r.id)).map(toFeature);
@@ -153,7 +164,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
       in: { type: 'FeatureCollection' as const, features: inside },
       out: { type: 'FeatureCollection' as const, features: outside },
     };
-  }, [retailers, claimsByRetailer, storesInRadius]);
+  }, [retailers, claimsByRetailer, storesInRadius, hotMin]);
 
   const radiusRing = useMemo(() => circle(pin, radiusMiles, { units: 'miles', steps: 96 }), [pin, radiusMiles]);
   const coverageRing = useMemo(
@@ -170,7 +181,13 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const stepBy = (input: unknown, out: readonly (string | number)[]) =>
     ['step', input, out[0], ...bubbleBreaks.flatMap((b, i) => [above(b), out[i + 1]])];
   const storeColor = stepBy(['get', 'n'], bubbles[mode].ramp);
-  const storeRadius = stepBy(['get', 'n'], bubbleRadii);
+  // Playback: radius grows continuously with the running count (area ~ count), reaching the
+  // largest class size at the full range's hottest threshold, so stores keep compounding.
+  const growCap = Math.max(2, hotMin ?? (bubbleBreaks[bubbleBreaks.length - 1] ?? 10) * 2);
+  const storeRadius = playing
+    ? ['interpolate', ['linear'], ['sqrt', ['min', ['get', 'n'], growCap * 2]],
+        1, bubbleRadii[0], Math.sqrt(growCap), bubbleRadii[4], Math.sqrt(growCap * 2), bubbleRadii[4] * 1.35]
+    : stepBy(['get', 'n'], bubbleRadii);
   // Groups: color by average listed claims per store, size by the total.
   const groupColor = stepBy(['/', ['get', 'n'], ['get', 'point_count']], bubbles[mode].ramp);
   const groupRadius = ['interpolate', ['linear'], ['sqrt', ['get', 'n']], 0, 12, 20, 18, 60, 28, 120, 36];
@@ -178,14 +195,22 @@ export function ClaimsMap(props: ClaimsMapProps) {
   // Group labels are HTML markers: the offline style has no glyphs for map text.
   const refreshGroupLabels = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !showBubbles || !map.getSource('stores-in')) return setGroupLabels([]);
-    const seen = new Map<number, { id: number; lon: number; lat: number; n: number; stores: number }>();
+    if (!map || !showBubbles || !map.getSource('stores-in')) { setHotSingles([]); return setGroupLabels([]); }
+    const seen = new Map<number, { id: number; lon: number; lat: number; n: number; stores: number; hot: number }>();
     for (const f of map.querySourceFeatures('stores-in', { filter: ['has', 'point_count'] })) {
-      const p = f.properties as { cluster_id: number; n: number; point_count: number };
+      const p = f.properties as { cluster_id: number; n: number; point_count: number; hot: number };
       const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
-      if (!seen.has(p.cluster_id)) seen.set(p.cluster_id, { id: p.cluster_id, lon, lat, n: p.n, stores: p.point_count });
+      if (!seen.has(p.cluster_id)) seen.set(p.cluster_id, { id: p.cluster_id, lon, lat, n: p.n, stores: p.point_count, hot: p.hot ?? 0 });
     }
     setGroupLabels([...seen.values()].filter((g) => g.n > 0));
+    // Hottest stores drawn on their own (not grouped) get a 🔥 badge on the bubble.
+    const singles = new Map<string, { id: string; lon: number; lat: number; n: number }>();
+    for (const f of map.querySourceFeatures('stores-in', { filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'hot'], 1]] })) {
+      const p = f.properties as { id: string; n: number };
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      singles.set(p.id, { id: p.id, lon, lat, n: p.n });
+    }
+    setHotSingles([...singles.values()]);
   }, [showBubbles]);
 
   const expandGroup = async (clusterId: number, lngLat: [number, number]) => {
@@ -204,7 +229,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const placeCard = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!pinned || !map) return;
-    const CARD_H = 390, CARD_W = 330, GAP = 18;
+    const CARD_H = 450, CARD_W = 330, GAP = 18;
     const pt = map.project(pinned.lngLat);
     const { width, height } = map.getContainer().getBoundingClientRect();
     const h = pt.x < CARD_W / 2 ? '-left' : pt.x > width - CARD_W / 2 ? '-right' : '';
@@ -247,8 +272,6 @@ export function ClaimsMap(props: ClaimsMapProps) {
     [mode],
   );
 
-  const hovered = hover ? byGeoid.get(hover.geoid) : undefined;
-  const hoveredProps = hover ? tracts.features.find((f) => f.properties.geoid === hover.geoid)?.properties : undefined;
 
   return (
     // isolate: pins and cards stack inside the map, never above the panels laid over it.
@@ -267,27 +290,17 @@ export function ClaimsMap(props: ClaimsMapProps) {
           placeCard();
           const map = mapRef.current?.getMap();
           const b = map?.getBounds();
-          if (b) setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+          if (b) {
+            const next: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            setBounds(next);
+            onBounds?.(next);
+          }
           if (map) setLabelIds(placeLabels(map, visibleStores, claimsByRetailer));
         }}
-        onMouseMove={(e: MapLayerMouseEvent) => {
-          if (onMarker(e.originalEvent)) { setHover(null); setGroupHover(null); setStoreHover(null); return; }
-          const f = e.features?.[0];
-          if (f?.layer.id === 'group-in') {
-            const p = f.properties as { n: number; point_count: number };
-            setHover(null); setStoreHover(null);
-            setGroupHover({ x: e.point.x, y: e.point.y, n: p.n, stores: p.point_count });
-            return;
-          }
-          if (f?.layer.id === 'store-in' || f?.layer.id === 'store-out') {
-            setHover(null); setGroupHover(null);
-            setStoreHover({ x: e.point.x, y: e.point.y, id: String(f.properties?.id) });
-            return;
-          }
-          setGroupHover(null); setStoreHover(null);
-          setHover(f ? { x: e.point.x, y: e.point.y, geoid: String(f.properties?.geoid) } : null);
-        }}
-        onMouseLeave={() => { setHover(null); setGroupHover(null); setStoreHover(null); }}
+        // No hover cards (owner's call): details open only on click, as a pinned card.
+        cursor={cursor}
+        onMouseMove={(e: MapLayerMouseEvent) => setCursor(e.features?.length && !onMarker(e.originalEvent) ? 'pointer' : 'grab')}
+        onMouseLeave={() => setCursor('grab')}
         onClick={(e: MapLayerMouseEvent) => {
           if (onMarker(e.originalEvent)) return; // pins and the pinned card handle their own clicks
           const f = e.features?.[0];
@@ -357,10 +370,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
         </Source>
         {showBubbles && (
           <>
-          <Source id="stores-out" type="geojson" data={storeSources.out} cluster clusterRadius={36} clusterMaxZoom={12}
-            clusterProperties={{ n: ['+', ['get', 'n']] }}>
+          <Source key={`out-${playing}`} id="stores-out" type="geojson" data={storeSources.out} cluster={!playing} clusterRadius={36} clusterMaxZoom={12}
+            clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-out"
+              layout={{ visibility: playing ? 'none' : 'visible' }}
               type="circle"
               maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
@@ -402,10 +416,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
               }}
             />
           </Source>
-          <Source id="stores-in" type="geojson" data={storeSources.in} cluster clusterRadius={36} clusterMaxZoom={12}
-            clusterProperties={{ n: ['+', ['get', 'n']] }}>
+          <Source key={`in-${playing}`} id="stores-in" type="geojson" data={storeSources.in} cluster={!playing} clusterRadius={36} clusterMaxZoom={12}
+            clusterProperties={{ n: ['+', ['get', 'n']], hot: ['+', ['get', 'hot']] }}>
             <Layer
               id="hollow-in"
+              layout={{ visibility: playing ? 'none' : 'visible' }}
               type="circle"
               maxzoom={PIN_ZOOM}
               filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'n'], 0]]}
@@ -449,10 +464,10 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </Source>
           </>
         )}
-        {showBubbles && groupLabels.map((g) => (
+        {showBubbles && !playing && groupLabels.map((g) => (
           <Marker key={g.id} longitude={g.lon} latitude={g.lat} anchor="center" style={{ pointerEvents: 'none' }}>
             <span className="text-[11px] font-semibold tabular" style={{ color: classOfAvg(g, bubbleBreaks) >= 2 ? '#fff' : '#0a0a0a' }}>
-              {g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}
+              {g.hot > 0 && <span aria-label={`${g.hot} hottest stores`}>🔥</span>}{g.n >= 1000 ? `${(g.n / 1000).toFixed(1)}k` : g.n}
             </span>
           </Marker>
         ))}
@@ -464,13 +479,19 @@ export function ClaimsMap(props: ClaimsMapProps) {
               paint={{ 'circle-radius': selectedRadius + 4, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': c.ink, 'circle-stroke-width': 2.5 }} />
           </Source>
         )}
+        {showBubbles && zoom < PIN_ZOOM && hotSingles.map((h) => (
+          <Marker key={`hot-${h.id}`} longitude={h.lon} latitude={h.lat} anchor="center"
+            offset={[bubbleRadii[4] * 0.75, -bubbleRadii[4] * 0.75]} style={{ pointerEvents: 'none', zIndex: 2 }}>
+            <span className="text-[13px] leading-none drop-shadow-[0_0_2px_rgba(255,255,255,0.9)]" aria-label="Hottest store">🔥</span>
+          </Marker>
+        ))}
         {showBubbles && zoom >= PIN_ZOOM && visibleStores.map((r) => {
           const n = claimsByRetailer.get(r.id) ?? 0;
           const cls = classOf(n, bubbleBreaks);
           return (
             <Marker key={r.id} longitude={r.lon} latitude={r.lat} anchor="bottom-left" offset={[-15, 2]}
               style={{ zIndex: selection?.kind === 'store' && selection.id === r.id ? 3 : n > 0 ? 2 : 1, opacity: storesInRadius.has(r.id) ? 1 : 0.45 }}>
-              <StorePin n={n} color={bubbles[mode].ramp[cls]} ink={cls >= 2 ? 'light' : 'dark'} name={r.name}
+              <StorePin n={n} hot={isHot(n)} color={bubbles[mode].ramp[cls]} ink={cls >= 2 ? 'light' : 'dark'} name={r.name}
                 showName={zoom >= NAME_ZOOM && (labelIds.has(r.id) || (selection?.kind === 'store' && selection.id === r.id))} selected={selection?.kind === 'store' && selection.id === r.id}
                 onClick={() => onSelectStore?.(r.id)} />
             </Marker>
@@ -493,31 +514,6 @@ export function ClaimsMap(props: ClaimsMapProps) {
           </span>
         </Marker>
       </MapGL>
-      {groupHover && !pinned && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: groupHover.x + 14, top: groupHover.y + 14 }}>
-          <Card className="w-[240px] p-3">
-            <p className="text-sm font-semibold text-primary tabular">{fmtInt(groupHover.stores)} stores grouped</p>
-            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(groupHover.n)} listed claims (over $600)</p>
-            <p className="text-xs text-tertiary tabular">{(groupHover.n / groupHover.stores).toFixed(1)} per store on average</p>
-            <p className="mt-2 text-xs text-tertiary">Click or zoom in to see each store.</p>
-          </Card>
-        </div>
-      )}
-      {storeHover && !pinned && storeById.get(storeHover.id) && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: storeHover.x + 14, top: storeHover.y + 14 }}>
-          <Card className="w-[240px] p-3">
-            <p className="truncate text-sm font-semibold text-primary">{storeById.get(storeHover.id)!.name}</p>
-            <p className="truncate text-xs text-tertiary">{storeById.get(storeHover.id)!.address}</p>
-            <p className="mt-1 text-sm text-secondary tabular">{fmtInt(claimsByRetailer.get(storeHover.id) ?? 0)} listed claims (over $600)</p>
-            <p className="mt-1.5 text-xs text-tertiary">Click for recent claims and actions.</p>
-          </Card>
-        </div>
-      )}
-      {hover && hovered && hoveredProps && !pinned && (
-        <div className="pointer-events-none absolute z-[2]" style={{ left: hover.x + 14, top: hover.y + 14 }}>
-          <TractTooltip tract={hoveredProps} metrics={hovered} coverage={coverage} />
-        </div>
-      )}
     </div>
   );
 }

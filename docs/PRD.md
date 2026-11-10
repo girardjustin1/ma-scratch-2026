@@ -35,6 +35,9 @@ Key decisions:
 | Public list = prizes of about $600+ | Label "listed claims ($600+)"; small prizes invisible |
 
 - Statewide EV never appears on a store/tract tooltip or the map; EV panel ignores map filters.
+  Owner decision 2026-11-10: the game picker may sort by estimated payback (statewide EV per
+  $1), with the EV banner and "check inputs" on positive estimates. It still never colors,
+  labels or filters anything on the map by EV.
 - Income always shown with its margin of error; suppressed/very uncertain estimates flagged.
 - Legacy EV estimates are read-only, never overwritten or blended.
 
