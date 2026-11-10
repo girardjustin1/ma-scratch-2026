@@ -26,6 +26,9 @@ export const CAVEATS = {
   association: 'Results describe association, not cause.',
   unclaimedPrizes:
     'Unclaimed prizes are statewide counts from the Lottery’s prize table: prizes not yet paid out, including tickets not yet sold. They say nothing about which store holds them.',
+  volumeNotLuck:
+    'A store with more listed claims has usually sold more tickets. That is volume, not luck.',
+  notAdvice: 'This describes public Lottery records. It is not advice to buy tickets.',
   matchedOnly:
     'Counts are a floor: claims at stores that could not be matched by name and town, or whose location could not be verified, are left out.',
 } as const;

@@ -30,6 +30,19 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   Charts are grey. Status is icon + words, never color.
 - Light/dark: `useMode()` from `web/src/theme/mode.tsx`; dark mode is `.dark-mode` on `<html>`.
 
+## Insights emails
+
+- `web/src/emails/`: React Email templates for sending with Resend. Three so far: weekly
+  insights (trends, analysis, what's new), featured tickets, and +EV watch. Inline styles
+  and tables (email clients), same monochrome look; shared parts in `parts.tsx`.
+- Templates only lay out data passed in (`types.ts`); they compute nothing from claims.
+- Same honesty rules as the app. Owner asked for +EV in email (2026-11-10): every estimate
+  above 100% carries "Check inputs" and a reason, with the statewide banner; never call one
+  a sure thing. Describe the area as "your pin", never the address.
+- Stories (`Emails`) use `emails/fixtures.ts`, which is SYNTHETIC. Real emails are built
+  from local data and never committed. Sending real data through Resend is the owner's
+  call each time it is set up; nothing sends yet.
+
 ## Data handling
 
 - `data/` and `.env*` are gitignored and never committed. The repo is **public**, and the

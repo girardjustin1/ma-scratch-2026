@@ -16,7 +16,7 @@ const preview: Preview = {
     layout: 'padded',
     controls: { expanded: true },
     options: {
-      storySort: { order: ['Foundations', 'Components', 'Map', 'Pages', 'Prototype'] },
+      storySort: { order: ['Foundations', 'Components', 'Emails', 'Map', 'Pages', 'Prototype'] },
     },
   },
   decorators: [
