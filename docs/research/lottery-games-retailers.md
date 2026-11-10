@@ -342,6 +342,160 @@ retailer_location`, and sometimes `retailer`.
 - **Plan:** accumulate going forward. One dated snapshot per user-triggered refresh, stored as the
   `prize_tiers` grain (game × tier × snapshot). Wayback imports must be tagged `source=wayback` with
   the capture timestamp.
+- The counts above came from an unfiltered first look. The **Wayback history** section below
+  has the full pull, limited to captures since 2023-11.
+
+## Wayback history
+
+Built 2026-11-10 UTC (2026-11-09 US Eastern) as the "earlier estimates" history for the EV
+panel. The owner chose this over a legacy EV file. All content is official Lottery responses as
+archived by the Internet Archive. Nothing came from masslottery.com directly, and no login was
+used. Raw bytes, outputs and the manifest are local and gitignored. **No Lottery rows are
+reproduced here.**
+
+### TL;DR
+
+- **89 game × date EV points** for **57 games** on **24 capture dates**, from **2025-01-06 to
+  2026-09-24**. Of the 57 games, 38 have 1 point, 10 have 2, 7 have 3, one has 4 and one has 6.
+  This gives spot estimates, not a series.
+- Every point comes from a full per-game table (`?gameID=N`) whose own capture states the
+  tickets printed. **No fallback was needed:** 0 points borrowed tickets printed from another
+  capture or from the live API.
+- **There are no full tables between 2023-11 and 2024-12.** The first is dated 2025-01-06.
+  `/special` (TOP/SECONDARY only) and the catalog cannot produce EV. The per-game HTML pages are
+  SPA shells with no numbers.
+- The hand-check on 2 games matched the pipeline to the cent. **8 points have a positive EV**
+  and are flagged `check_inputs`. They have known causes (below). Two more points rest on a
+  bad capture-day `prizeAmount` and are flagged.
+
+### Coverage by URL pattern (CDX, `from=20231101`, queried 2026-11-10)
+
+| Pattern | CDX rows | Distinct capture dates | Games | Content | Usable for EV |
+| --- | --- | --- | --- | --- | --- |
+| `/api/v1/instant-game-prizes?gameID=N` (A3) | 89, all HTTP 200, 89 distinct digests | 24 (2025-01-06 .. 2026-09-24) | 57 | **Full table**, tickets-printed text, tier odds | **Yes** (all 89) |
+| `/api/v1/instant-game-prizes/special` (A2) | 31 (30 × 200, 1 × 302) | 30 (2025-01-06 .. 2026-10-02) | 213 across all captures | TOP + SECONDARY tiers only | No: no lowest tier, no tickets printed |
+| `/api/v1/games` (A1 catalog) | 60 (54 × 200, 6 `warc/revisit`), 45 distinct digests | 60 (2023-11-01 .. 2026-10-02) | 238 scratch games across all captures | Name, price, odds, tags, `expirationDate` | No: used for names, prices and claims-only status only |
+| `/games/draw-and-instants/{identifier}` (HTML) | 2,004 per-game captures (2,061 with listing variants) | 512 (2023-11-01 .. 2026-09-12) | 212 slugs | **SPA shell.** One capture fetched (7.4 KB): only the JS bundle tag, no prize data | No |
+| `/tools/prizes-remaining` (HTML) | 70 | 53 | — | **SPA shell.** One capture fetched (3.1 KB): no numbers | No |
+
+Full-table captures by month: 2025-01: 5, 2025-09: 2, 2025-10: 3, 2025-11: 7, 2025-12: 2,
+2026-01: 8, 2026-02: 8, 2026-03: 1, 2026-05: 5, **2026-06: 41** (88 distinct timestamps; two games share one), 2026-08: 2, 2026-09: 4. They
+cluster where someone browsed game pages while the archive's crawler was recording XHRs. EV
+points by ticket price: $2: 3, $5: 28, $10: 37, $20: 11, $30: 4, $50: 6.
+
+`/special` capture dates: 2025-01-06, 08-02, 08-11, 09-03, 10-24, 11-08, 11-10, 11-11, 11-12,
+11-25, 12-05, 12-10, 12-15, 12-21, 12-23, 12-24, 12-28; 2026-01-03, 01-21, 02-05, 02-27, 03-01,
+03-21, 03-25, 05-02, 06-11, 06-16, 06-28, 08-02, 10-02. The first look's 2022-11-09 capture is
+before the 2023-11 window.
+
+### Method
+
+1. **CDX:** 6 queries (one first attempt returned HTTP 504 and was retried with a narrower
+   query). The `www.` and bare-host URLs are merged by the archive's URL canonicalization.
+2. **Fetch:** every distinct-digest JSON capture via the raw form
+   `web.archive.org/web/<ts>id_/<url>` (89 + 30 + 45 = 164), plus 2 HTML probes. **Total
+   archive.org requests: 172** (under the 400 cap), with at least 1.6 s between requests. Every
+   request returned HTTP 200 except the one 504. The 6 catalog `warc/revisit` rows reuse their
+   base capture's bytes and keep their own dates.
+3. **Parse** into `data/processed/`:
+   - `prize_tiers_history.parquet` (6,349 rows: 1,036 `wayback_full`, 5,313 `wayback_summary`).
+     Columns: `game_id, snapshot_date` (UTC capture date), `capture_timestamp, tier_number,
+     prize_description, tier_value, tier_value_basis, value_advertised` (first $ amount in the
+     description), `value_valuation` (`prizeAmount`), `is_annuity, annuity_values_differ, total,
+     paid, remaining, tier_odds, tier_type, is_launch_top_prize, source, capture_url`.
+   - `is_launch_top_prize` (full tables only; null for summary rows) is the tier with the largest
+     of (advertised, valuation) across the full table. This catches tiers labelled `REGULAR`,
+     and "/WK/LF" prizes whose first $ amount is a weekly figure. Each of the 89 captures has
+     exactly one such tier. In 2 captures it is not the tier labelled `TOP`.
+   - `tier_value` = `prizeAmount` (all 1,036 full-table tiers had `prizeAmount` > 0, so none
+     needed the description). **Annuity tiers:** both amounts are kept and
+     `annuity_values_differ` is set where they disagree (e.g. a $10M headline valued at
+     6,500,000; a "$2,500/WK/LF" tier valued at 2,000,000; "A Year For Life" valued above its
+     headline). EV uses the valuation. This is an assumption, and `method_note` says so.
+   - `games_history.parquet` (12,059 rows): `game_id, name, identifier, price, start_date,
+     tickets_printed` (only from full-table captures, parsed from "based on the sale of
+     [approximately] N tickets"; the word "approximately" is missing in some captures),
+     `overall_odds, snapshot_date, capture_timestamp, source` (`wayback_full`,
+     `wayback_summary`, `wayback_catalog`, `wayback_catalog_revisit`), `capture_url,
+     catalog_tags, catalog_expiration_date`.
+4. **EV** (`ev_history.parquet`, 89 rows), per PRD feature 4. Lowest tier = the tier(s) with the
+   smallest `tier_value`. tickets_remaining_est = printed × low_rem / low_total. ev_all =
+   Σ remaining × tier_value / tickets_remaining_est − price. ev_ex_jackpot drops the
+   launch-top tier. Columns: `game_id, as_of, capture_timestamp, price, tickets_printed,
+   tickets_printed_implied_by_odds, lowest_tier_value, lowest_tier_remaining,
+   lowest_tier_total, tickets_remaining_est, ev_all, ev_ex_jackpot, check_inputs, input_flags,
+   method_note`.
+5. **Validation:**
+   - remaining = total − paid in every tier.
+   - Stated tickets printed equals the median of totalPrizes × tier-odds denominator in **all
+     89** captures (max relative difference 0.0).
+   - No capture lacked a tickets-printed figure, a tier value or a nonzero lowest tier, so no
+     point was skipped.
+
+### Hand-check (recomputed with a separate stdlib script from the raw bytes)
+
+**Game 469, captured 2025-01-13, $10 ticket.** Lowest tier is $20 (the table has no $10 tier).
+
+- tickets remaining = 16,128,000 × 2,189,084 / 2,257,920 = 16,128,000 × 0.969513 =
+  **15,636,314.3**
+- Σ remaining × value over 9 tiers = **132,490,755**
+- ev_all = 132,490,755 / 15,636,314.3 − 10 = 8.4733 − 10 = **−1.5267**
+- ev_ex_jackpot: the launch top tier is 3 left × 4,000,000 = 12,000,000, so
+  (132,490,755 − 12,000,000) / 15,636,314.3 − 10 = 7.7058 − 10 = **−2.2942**
+- The pipeline gives −1.526727 and −2.294172. **Match.**
+
+**Game 452, captured 2026-05-02, $20 ticket.** It has an annuity top tier: $10M headline,
+`prizeAmount` 6,500,000.
+
+- tickets remaining = 12,096,000 × 433,702 / 1,693,440 = 7.142857 × 433,702 = **3,097,871.4**
+- Σ remaining × value over 13 tiers = **51,080,215**
+- ev_all = 51,080,215 / 3,097,871.4 − 20 = 16.4888 − 20 = **−3.5112**
+- ev_ex_jackpot = (51,080,215 − 1 × 6,500,000) / 3,097,871.4 − 20 = 14.3906 − 20 = **−5.6094**
+- The pipeline gives −3.511189 and −5.609404. **Match.**
+- Sensitivity: valuing the top tier at its $10M headline gives ev_all 54,580,215 / 3,097,871.4 −
+  20 = **−2.3813**. The annuity basis moves this point by about $1.13.
+
+### Flags in `ev_history`
+
+- **`check_inputs` (positive EV): 8 of 89 points.**
+  - 7 have the lowest tier under 5% remaining: 0.7% (two captures of one game), 1.1%, 1.7%,
+    2.6%, 3.6% and 4.7%. Late in a game's life the ratio estimate is unstable. Unsold or
+    destroyed tickets still count as "remaining" prizes, so positive EV is an artifact, not a
+    finding.
+  - 2 of those 7 were already claims-only in the catalog capture of the same day.
+  - 1 point has 13% of its lowest tier left, with jackpots unclaimed (ex-jackpot is negative).
+  - 4 of the 8 are positive even ex-jackpot.
+- **`input_flags`: 17 points.**
+  - 10 points are for games tagged `Expiring Game` (claims-only) in the catalog capture nearest
+    the same date (within 45 days).
+  - 8 points have the lowest tier under 5% remaining.
+  - 2 points (two new games, both captured 2026-06-11) carry a `prizeAmount` of 10% of the
+    headline on their annuity tiers (100,000 for "$1,000,000 ($50K/YR/20YRS)"), with those
+    tiers labelled `REGULAR`. Every later capture shows the full headline with `TOP`/`SECONDARY`
+    labels. This looks like a launch-day data-entry state. Those two EVs understate. Use the
+    later captures.
+  - (Some points carry more than one flag.)
+
+### Limits
+
+- **Sparse and uneven.** 47% of points (42 of 89) are in June 2026. No game has a monthly series. The
+  2023-11 to 2024-12 window has catalog captures only.
+- **Selection bias.** Captures exist where people (or bots) opened game pages. Expiring, new and
+  popular games are probably over-represented.
+- **Capture date is the as-of.** The Lottery's tables carry no timestamp and are "updated
+  hourly" on a best-effort basis. Dates are UTC.
+- **The annuity valuation basis is unconfirmed** (cash option vs. cost). See Risks 1.
+- **Lowest-tier method.** It assumes the lowest tier sells evenly with tickets. That breaks near
+  the end of a game and for games whose smallest prize is above the ticket price (20 of 89
+  points).
+- **Not reproducible from here.** The tables are personal-use only. Rebuild locally with the
+  scratch scripts.
+
+Rebuild: `scripts/scratch/wayback/` (`wb.py` is the polite fetcher with a persistent 400-request
+budget; `cdx.py`/`cdx2.py` list captures, `fetch.py` downloads, and `parse.py` builds the three
+Parquet files and runs `uv run --with polars python parse.py`). Raw files and
+`manifest.jsonl` (original url, capture timestamp, fetched_at, status, sha256) are under
+`data/raw/wayback/`.
 
 ## Refresh plan (user-triggered, per PRD)
 
