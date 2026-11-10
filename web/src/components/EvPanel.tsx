@@ -45,7 +45,7 @@ export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
                 <TableCell align="right">Est. tickets remaining</TableCell>
                 <TableCell align="right">Net EV, all prizes</TableCell>
                 <TableCell align="right">Net EV, excl. original jackpot</TableCell>
-                <TableCell align="right" sx={{ borderLeft: 1, borderLeftColor: 'divider' }}>Legacy estimate</TableCell>
+                <TableCell align="right" sx={{ borderLeft: 1, borderLeftColor: 'divider' }}>Earlier estimate (Wayback)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -73,7 +73,7 @@ export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
                   <TableCell align="right">{ev ? fmtSignedUsdCents(ev.evExJackpot) : '—'}</TableCell>
                   <TableCell align="right" sx={{ borderLeft: 1, borderLeftColor: 'divider' }}>
                     {l ? (
-                      <Tooltip title={`${l.methodNote}. Read-only; never blended with new estimates.`}>
+                      <Tooltip title={`${l.methodNote}. Computed from an archived full prize table; kept separate from the current estimate.`}>
                         <Box>
                           <span>{fmtSignedUsdCents(l.evAll)}</span>
                           <Typography variant="caption" sx={{ display: 'block' }}>as of {fmtDate(l.asOf)}</Typography>

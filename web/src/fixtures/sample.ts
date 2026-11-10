@@ -106,7 +106,7 @@ export const legacyEv: LegacyEv[] = games.slice(0, 14).map((g) => ({
   asOf: '2026-06-30',
   evAll: -g.price * (0.22 + r() * 0.12),
   evExJackpot: -g.price * (0.3 + r() * 0.14),
-  methodNote: 'Sample legacy method note',
+  methodNote: 'Sample: Wayback full prize table captured 2026-06-30',
 }));
 
 // ---- Coverage & claims -------------------------------------------------------------
