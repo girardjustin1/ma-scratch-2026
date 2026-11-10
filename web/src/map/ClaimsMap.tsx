@@ -93,6 +93,9 @@ export function ClaimsMap(props: ClaimsMapProps) {
   const ramp = rampFor(metric, mode);
   const fillColor = ['match', ['get', 'cls'], 0, ramp[0], 1, ramp[1], 2, ramp[2], 3, ramp[3], 4, ramp[4], ramp[0]];
   const c = chrome[mode];
+  // Must be referentially stable: a new style object makes MapLibre reload the whole style
+  // (every layer) on each render, which flashes the map blank on hover.
+  const mapStyle = useMemo(() => baseStyle(mode, basemap), [mode, basemap]);
 
   const onLoad = useCallback(
     (e: { target: MlMap }) => {
@@ -116,7 +119,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
         initialViewState={{ longitude: pin[0], latitude: pin[1], zoom: 10.4 }}
         {...(viewState ? { ...viewState } : {})}
         onMove={onMove ? (e) => onMove(e.viewState) : undefined}
-        mapStyle={baseStyle(mode, basemap)}
+        mapStyle={mapStyle}
         onLoad={onLoad}
         interactiveLayerIds={['tract-fill', 'tract-nodata']}
         onMouseMove={(e: MapLayerMouseEvent) => {
