@@ -45,7 +45,7 @@ const Key = ({ children }: { children: React.ReactNode }) => (
 export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles }: MapLegendProps) {
   const mode = useMode();
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
-  const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v));
+  const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v), metric === 'claims');
   const classes = ramp.slice(0, breaks.length + 1);
   const hatch = noData[mode];
   const ink = chrome[mode].ink;
@@ -53,7 +53,9 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
   return (
     <Card className="w-[260px] p-4">
       <p className="text-sm font-semibold text-primary">{TITLES[metric]}</p>
-      <p className="mb-2.5 text-xs text-tertiary tabular">Quantile classes · {fmtInt(tractCount)} tracts</p>
+      <p className="mb-2.5 text-xs text-tertiary tabular">
+        {metric === 'claims' && breaks.join() === '0,1,3,9' ? 'Fixed classes' : 'Quantile classes'} · {fmtInt(tractCount)} tracts
+      </p>
       <ul className="flex flex-col gap-1.5">
         {classes.map((color, i) => (
           <li key={color} className="flex items-center gap-2">

@@ -45,7 +45,9 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
           <GamesPage games={S.games} tiers={S.prizeTiers} claims={S.claims} coverage={S.coverage} asOf={S.AS_OF}
             onFilterMap={local ? undefined : (id) => setMapGame(id)} />
         )}
-        {tab === 'ev' && <EvPage games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} />}
+        {tab === 'ev' && (local?.ev
+          ? <EvPage games={local.ev.games} tiers={local.ev.tiers} legacy={local.ev.legacy} asOf={local.ev.asOf} />
+          : <EvPage games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} />)}
         {tab === 'stats' && (
           <StatsPage stats={S.statResults}
             schedule={local ? { claims: local.claims, source: `real, ${local.coverage.label}` } : { claims: S.claims, source: 'sample data' }} />

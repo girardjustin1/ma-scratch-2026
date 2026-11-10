@@ -62,6 +62,20 @@ export interface GameRef {
   tags?: string[];
   /** Ticket art (2:1 tile), served locally; null/undefined when there is none. */
   image?: string | null;
+  /** Statewide EV estimate (domain/ev.ts). Per ticket, never per store. */
+  ev?: GameEv | null;
+}
+
+/** Statewide expected value per ticket, from the prize table (PRD §4). */
+export interface GameEv {
+  asOf: IsoDate;
+  evAll: number;
+  evExJackpot: number;
+  /** Estimated return per $1: (evAll + price) / price. */
+  payback: number;
+  paybackExJackpot: number;
+  /** Positive EV: almost always an estimation artefact, so it is flagged, not trusted. */
+  checkInputs: boolean;
 }
 
 /** Statewide counts from the Lottery's prize table. Never per store. */

@@ -3,12 +3,13 @@ import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { distance, point } from '@turf/turf';
-import { countBreaks, quantileBreaks } from '../domain/classify';
+import { claimCountBreaks, countBreaks, quantileBreaks } from '../domain/classify';
 import { computeTractMetrics, filterClaims, metricValue } from '../domain/metrics';
 import type {
   Claim, Coverage, Filters, GameRef, MetricKey, Retailer, TownMatch, TractCollection, TractIncome, TractMetrics,
 } from '../domain/types';
 import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
+import type { EvData } from '../data/localView';
 import type { Basemap } from '../map/mapStyle';
 import { CoverageChip } from '../components/Basics';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
@@ -28,6 +29,8 @@ export interface ExploreData {
   coverage: Coverage;
   /** Per-town matching outcome; only present for real data. */
   townMatch?: Record<string, TownMatch>;
+  /** Real statewide EV inputs for the EV tab; only present for real data. */
+  ev?: EvData;
 }
 
 export interface ExplorePageProps {
@@ -57,7 +60,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
     const metrics = computeTractMetrics({ ...data, claims, filters });
     const shown = metrics.filter((m) => m.inRadius);
     const values = shown.map((m) => metricValue(m, metric)).filter((v): v is number => v !== null);
-    const breaks = metric === 'claims' ? countBreaks(values, 5) : quantileBreaks(values, 5);
+    const breaks = metric === 'claims' ? claimCountBreaks(values) : quantileBreaks(values, 5);
     const claimsByRetailer = new Map<string, number>();
     for (const c of claims) claimsByRetailer.set(c.retailerId, (claimsByRetailer.get(c.retailerId) ?? 0) + 1);
     // Store classes for the bubbles: quantile breaks over in-radius stores with listed claims,

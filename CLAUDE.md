@@ -11,7 +11,10 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
 - Claims are listed prizes **over $600** (the API's minimum is $601), located by the
   **selling** retailer's town. Not all wins.
 - Retailer count is not sales volume. Tract income is not buyer income.
-- Statewide EV only in the EV panel; never on the map or implying store inventory.
+- Statewide EV never on the map or implying store inventory. It lives in the EV panel; the
+  owner also allowed (2026-11-10) an "estimated payback" sort in the game picker list, with
+  the statewide banner and every positive estimate flagged "check inputs". Never on map
+  layers, tooltips, store cards or the place panel.
 - Legacy EV estimates are read-only.
 - Statistics and ML show results only above their sample gates.
 - Wording lives in `web/src/lib/copy.ts`; colors in `web/src/theme/tokens.ts`.

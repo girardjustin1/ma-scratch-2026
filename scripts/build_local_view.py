@@ -137,6 +137,44 @@ def main():
                 "image": f"/local/tiles/{g}.webp" if (TILES / f"{g}.webp").exists() else None}
 
     games = [meta(g) for g in game_ids]
+
+    # Statewide EV inputs (PRD §4), computed in the app by web/src/domain/ev.ts so the EV
+    # tab and the game picker use one formula. Tickets printed: the catalog snapshot's
+    # figure when the Wayback capture has one, else total prizes x stated overall odds.
+    ev = {"asOf": None, "games": [], "tiers": [], "legacy": []}
+    if current.exists():
+        printed = dict(con.execute(
+            f"SELECT identifier, arg_max(tickets_printed, snapshot_date) FROM read_parquet('{P / 'games_history.parquet'}') "
+            f"WHERE tickets_printed IS NOT NULL GROUP BY 1").fetchall())
+        tiers = con.execute(f"""SELECT identifier, max(as_of) OVER (), prize_amount, total, remaining, tier_type = 'TOP'
+            FROM read_parquet('{current}') ORDER BY identifier, prize_amount""").fetchall()
+        by_game = {}
+        for ident, as_of, value, total, remaining, is_top in tiers:
+            ev["asOf"] = as_of
+            by_game.setdefault(ident, []).append((value, total, remaining, is_top))
+            ev["tiers"].append({"gameId": ident, "value": value, "total": total, "remaining": remaining, "isLaunchTopPrize": bool(is_top)})
+        for ident, trs in by_game.items():
+            cat = on_sale.get(ident) or {}
+            try:
+                odds = float(str(cat.get("odds", "")).split("in")[-1].replace(",", ""))
+            except ValueError:
+                odds = None
+            tp = printed.get(ident) or (round(sum(r[1] for r in trs) * odds) if odds else None)
+            if not tp or cat.get("price") is None:
+                continue
+            ev["games"].append({"id": ident, "name": cat["name"].strip(), "price": cat["price"],
+                                "launchDate": cat.get("startDate"), "status": "open", "ticketsPrinted": tp,
+                                "overallOdds": odds, "originalTopPrize": max(r[0] for r in trs),
+                                "printedSource": "catalog" if printed.get(ident) else "odds"})
+        id_by_num = dict(con.execute(
+            f"SELECT game_id, any_value(identifier) FROM read_parquet('{P / 'games_history.parquet'}') "
+            f"WHERE identifier IS NOT NULL GROUP BY 1").fetchall())
+        for gid, as_of, ev_all, ev_ex, note in con.execute(f"""
+            SELECT game_id, arg_max(as_of, as_of), arg_max(ev_all, as_of), arg_max(ev_ex_jackpot, as_of), arg_max(method_note, as_of)
+            FROM read_parquet('{P / 'ev_history.parquet'}') WHERE ev_all IS NOT NULL GROUP BY 1""").fetchall():
+            if gid in id_by_num:
+                ev["legacy"].append({"gameId": id_by_num[gid], "asOf": as_of, "evAll": ev_all, "evExJackpot": ev_ex,
+                                     "methodNote": note or "Wayback prize table"})
     gidx = {g: i for i, g in enumerate(game_ids)}
 
     # Per-municipality match rates: what share of the town's listed scratch claims matched a
@@ -168,6 +206,7 @@ def main():
         "retailers": retailers,
         "games": games,
         "townMatch": town_match,
+        "ev": ev,
         # Compact claims: [listedDate, gameIndex, prizeAmount, retailerId]
         "claims": [[d, gidx[g], amt, rid] for d, g, _, amt, rid in rows],
     }
@@ -175,7 +214,8 @@ def main():
     OUT.write_text(json.dumps(out, separators=(",", ":")))
     print(f"{len(tracts)} tracts, {len(income)} income rows, {len(retailers)} placed retailers, "
           f"{len(rows):,} claims, {len(games)} games ({sum(g['onSale'] for g in games)} on sale, "
-          f"{sum(1 for g in games if g['prizes'])} with prize tables, {sum(g['price'] is None for g in games)} unpriced), {out['coverage']['dateFrom']} → {out['coverage']['dateTo']} "
+          f"{sum(1 for g in games if g['prizes'])} with prize tables, {sum(g['price'] is None for g in games)} unpriced), "
+          f"EV inputs for {len(ev['games'])} games, {len(ev['legacy'])} earlier estimates, {out['coverage']['dateFrom']} → {out['coverage']['dateTo']} "
           f"→ {OUT.relative_to(ROOT)} ({OUT.stat().st_size / 1e6:.1f} MB)")
     os.chmod(OUT, 0o600)
 

@@ -19,7 +19,7 @@ import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
 import { CaveatNote } from './Basics';
 import { Chip } from './Chip';
 
-export type GameSort = 'unclaimed' | 'top' | 'claims' | 'newest' | 'name';
+export type GameSort = 'unclaimed' | 'payback' | 'top' | 'claims' | 'newest' | 'name';
 
 // ---- Filter chips --------------------------------------------------------------------
 // Chips narrow the list only; the map changes when games are selected. Within a facet the
@@ -101,6 +101,7 @@ function passesFacets(g: GameRef, facets: Facet[], sel: FacetSelection, ctx: Fac
 
 const SORTS: { value: GameSort; label: string }[] = [
   { value: 'unclaimed', label: 'Most unclaimed prizes over $600' },
+  { value: 'payback', label: 'Highest estimated payback (statewide EV)' },
   { value: 'top', label: 'Most top prizes left' },
   { value: 'claims', label: 'Most listed claims in radius' },
   { value: 'newest', label: 'Newest launch' },
@@ -136,6 +137,7 @@ export function arrangeGames(args: {
   const desc = (a: number | null | undefined, b: number | null | undefined) => (b ?? -Infinity) - (a ?? -Infinity);
   const cmp: Record<GameSort, (a: GameRef, b: GameRef) => number> = {
     unclaimed: (a, b) => desc(a.prizes?.remainingOver600, b.prizes?.remainingOver600),
+    payback: (a, b) => desc(a.ev?.payback, b.ev?.payback),
     top: (a, b) => desc(a.prizes?.topRemaining, b.prizes?.topRemaining) || desc(a.prizes?.topPrize, b.prizes?.topPrize),
     claims: (a, b) => desc(claimCounts.get(a.id), claimCounts.get(b.id)),
     newest: (a, b) => (b.launchDate ?? '').localeCompare(a.launchDate ?? ''),
@@ -224,7 +226,7 @@ function TicketThumb({ src }: { src?: string | null }) {
   );
 }
 
-function GameRow({ g, claims }: { g: GameRef; claims: number }) {
+function GameRow({ g, claims, sort }: { g: GameRef; claims: number; sort: GameSort }) {
   const p = g.prizes;
   const meta = [
     g.price != null ? `$${g.price}` : 'Price unknown',
@@ -251,7 +253,10 @@ function GameRow({ g, claims }: { g: GameRef; claims: number }) {
             </div>
             <AriaText slot="description" className="block truncate text-xs text-tertiary">{meta}</AriaText>
           </div>
-          <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />
+          {sort === 'payback'
+            ? <Metric value={g.ev ? `${Math.round(g.ev.payback * 100)}%` : '—'}
+                label={g.ev?.checkInputs ? 'check inputs' : 'est. payback / $1'} muted={!g.ev} />
+            : <Metric value={p ? fmtInt(p.remainingOver600) : '—'} label="unclaimed >$600" muted={!p} />}
           <Metric value={p ? `${fmtInt(p.topRemaining)} of ${fmtInt(p.topTotal)}` : '—'} label="top prizes left" muted={!p} />
           <Metric value={fmtInt(claims)} label="listed in radius" muted={claims === 0} />
         </>
@@ -318,7 +323,7 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
   const display =
     value.length === 0 ? (prices.length ? `All ${priceText} games` : 'All games') : value.length === 1 ? (games.find((g) => g.id === value[0])?.name ?? '1 game') : `${value.length} games`;
 
-  const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} />);
+  const rows = (list: GameRef[]) => list.map((g) => <GameRow key={g.id} g={g} claims={claimCounts.get(g.id) ?? 0} sort={sort} />);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -401,6 +406,12 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
                   )}
                 </AriaListBox>
                 <div className="flex flex-col gap-3 p-4">
+                  {sort === 'payback' && (
+                    <CaveatNote dense>
+                      {CAVEATS.evBanner} Estimated from the prize table (PRD formula); anything over 100% is flagged “check
+                      inputs” and usually reflects estimation limits. Full detail on the Statewide EV tab.
+                    </CaveatNote>
+                  )}
                   <CaveatNote dense>
                     {CAVEATS.unclaimedPrizes}{asOf ? ` Prize table as of ${fmtDate(asOf)}.` : ''} “—” means no prize table for that game.
                   </CaveatNote>

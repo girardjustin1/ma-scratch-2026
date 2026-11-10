@@ -3,6 +3,9 @@ import { Table, TableCard } from '@/components/application/table/table';
 import { BadgeWithIcon } from '@/components/base/badges/badges';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
+import { useState } from 'react';
+import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
+import { Toggle } from '@/components/base/toggle/toggle';
 import { estimateEv } from '../domain/ev';
 import type { Game, LegacyEv, PrizeTier } from '../domain/types';
 import { CAVEATS } from '../lib/copy';
@@ -30,12 +33,28 @@ const RIGHT = 'text-right tabular';
 /** Divider that keeps the archived Wayback estimate visibly apart from the current one. */
 const LEGACY = 'border-l border-secondary';
 
+type EvSort = 'price' | 'payback' | 'paybackEx';
+const payback = (ev: { evAll: number } | null, price: number) => (ev ? (ev.evAll + price) / price : -Infinity);
+const paybackEx = (ev: { evExJackpot: number } | null, price: number) => (ev ? (ev.evExJackpot + price) / price : -Infinity);
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
 /** Statewide EV. Deliberately takes no map filters as props. */
 export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
+  const [sort, setSort] = useState<EvSort>('payback');
+  const [positiveOnly, setPositiveOnly] = useState(false);
   const legacyBy = new Map(legacy.map((l) => [l.gameId, l]));
-  const rows = games
-    .map((g) => ({ g, ev: estimateEv(g, tiers), legacy: legacyBy.get(g.id) }))
-    .sort((a, b) => a.g.price - b.g.price || a.g.name.localeCompare(b.g.name));
+  const all = games.map((g) => ({ g, ev: estimateEv(g, tiers), legacy: legacyBy.get(g.id) }));
+  const positives = all.filter((r) => r.ev?.checkInputs).length;
+  const rows = all
+    .filter((r) => !positiveOnly || r.ev?.checkInputs)
+    .sort((a, b) =>
+      sort === 'price' ? a.g.price - b.g.price || a.g.name.localeCompare(b.g.name)
+      : sort === 'payback' ? payback(b.ev, b.g.price) - payback(a.ev, a.g.price)
+      : paybackEx(b.ev, b.g.price) - paybackEx(a.ev, a.g.price));
+  const median = (() => {
+    const v = all.filter((r) => r.ev).map((r) => payback(r.ev, r.g.price)).sort((a, b) => a - b);
+    return v.length ? v[Math.floor(v.length / 2)] : null;
+  })();
   return (
     <div className="flex flex-col gap-4">
       {/* Monochrome banner: the icon and bold words carry it, not color. */}
@@ -46,14 +65,33 @@ export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
       <TableCard.Root size="sm">
         <TableCard.Header
           title="Statewide expected value"
-          description={`Prizes remaining as of ${fmtDate(asOf)} · map filters do not apply here`}
+          description={`Prizes remaining as of ${fmtDate(asOf)} · ${all.length} games${median !== null ? ` · median estimated payback ${pct(median)} per $1` : ''} · map filters do not apply here`}
+          contentTrailing={
+            <div className="flex flex-wrap items-center gap-3">
+              <ButtonGroup size="sm" aria-label="Sort" disallowEmptySelection selectedKeys={[sort]}
+                onSelectionChange={(k) => { const v = [...k][0]; if (v) setSort(v as EvSort); }}>
+                <ButtonGroupItem id="payback" className="selected:bg-tertiary selected:text-primary">Best payback</ButtonGroupItem>
+                <ButtonGroupItem id="paybackEx" className="selected:bg-tertiary selected:text-primary">Best excl. jackpot</ButtonGroupItem>
+                <ButtonGroupItem id="price" className="selected:bg-tertiary selected:text-primary">Price</ButtonGroupItem>
+              </ButtonGroup>
+              <Toggle size="sm" label={`+EV estimates only · ${positives}`} isSelected={positiveOnly} onChange={setPositiveOnly} />
+            </div>
+          }
         />
+        {positiveOnly && (
+          <div className="flex items-start gap-2 border-b border-secondary bg-secondary px-4 py-2.5 text-xs text-secondary">
+            <AlertTriangle className="mt-px size-4 shrink-0 text-fg-secondary" aria-hidden />
+            Every positive estimate is flagged “Check inputs”. They usually come from games that are nearly sold out with a few
+            large prizes still listed, or from tickets-printed estimates. Compare the “excl. original jackpot” column.
+          </div>
+        )}
         <div className="[&>div]:max-h-140 [&>div]:overflow-y-auto">
           <Table aria-label="Statewide expected value by game">
             <Table.Header className="sticky top-0 z-10">
               <Table.Head id="game" label="Game" isRowHeader />
               <Table.Head id="price" label="Price" className={RIGHT_HEAD} />
               <Table.Head id="tickets" label="Est. tickets remaining" className={RIGHT_HEAD} />
+              <Table.Head id="payback" label="Est. payback per $1" className={RIGHT_HEAD} />
               <Table.Head id="evAll" label="Net EV, all prizes" className={RIGHT_HEAD} />
               <Table.Head id="evEx" label="Net EV, excl. original jackpot" className={RIGHT_HEAD} />
               <Table.Head id="legacy" label="Earlier estimate (Wayback)" className={cx(RIGHT_HEAD, LEGACY)} />
@@ -71,6 +109,10 @@ export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
                         </TooltipTrigger>
                       </Tooltip>
                     ) : '—'}
+                  </Table.Cell>
+                  <Table.Cell className={cx(RIGHT, 'font-semibold text-primary')}>
+                    {ev ? pct(payback(ev, g.price)) : '—'}
+                    {ev && <span className="block text-xs font-normal text-quaternary">{pct(paybackEx(ev, g.price))} excl. jackpot</span>}
                   </Table.Cell>
                   <Table.Cell className={RIGHT}>
                     {ev ? (
