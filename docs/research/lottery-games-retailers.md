@@ -24,9 +24,9 @@ and `data/raw/lottery_retailers/` (gitignored). Normalized samples are in `data/
   It returns the **100 nearest** retailers with id, name, address, town, ZIP, lat/lon and product
   flags. There is no bulk list. No state open-data dataset was found. A statewide list needs a
   tiled sweep, a supplied file or a public-records request.
-- **Total retailer count: not confirmed.** Secondary figures: "approximately 7,500 retailers"
-  (MA Treasury, FY2018) and "9,732 lottery sales agents who were active during the audit period"
-  (State Auditor, audit period from 2019).
+- **Total retailer count: about 7,039 in the locator on 2026-11-10** (statewide sweep, coverage proven over all land; see Statewide sweep). No official count was found to confirm it.
+  Secondary figures: "approximately 7,500 retailers" (MA Treasury, FY2018) and "9,732 lottery sales
+  agents who were active during the audit period" (State Auditor, audit period from 2019).
 - **Join to winners.** The winners list carries the game `identifier` slug, which joins exactly to
   the catalog. It carries retailer **name + town strings, not ids**. Matching to retailers is by
   normalized name + town. In the week 2026-11-01..07, 3,680 of 6,599 rows (56%) are
@@ -202,9 +202,8 @@ Petersham/North Quabbin.
 - **Tiled sweep with B1:** possible within the terms (personal download). It has to be adaptive,
   because density ranges from about 1 mi to about 15 mi per 100 retailers. Rough estimate: 300–800
   calls at 1 call per 2 s, about 10–30 minutes. Stop subdividing a cell once its 100th-nearest
-  distance exceeds the cell's half-diagonal. Dedupe on `retailerId`. The owner should approve
-  this before it runs. A 10 mi area around the owner's pin took only 42 calls (see Pin-area sweep),
-  so a statewide sweep may need fewer calls than estimated here.
+  distance exceeds the cell's half-diagonal. Dedupe on `retailerId`. **Done:** the owner-approved
+  statewide sweep took 134 new calls plus 45 reused (see Statewide sweep), far below this estimate.
 - **No history:** the locator shows current agents only. Maintain `first_seen` / `last_seen` from
   repeated sweeps (the PRD's `retailers` table already has them).
 
@@ -350,9 +349,135 @@ lacks. One judgment call to review: 7-Eleven franchise letters differ in some st
   distance_mi`. `tract_geoid` is the Census-verified tract, null when the retailer's geocode is
   flagged (64,782 rows have a tract). It includes matches in partial municipalities such as Boston.
 - `retailer_matches_pin_area.csv`: 1,473 matched (retailer, location) pairs.
-- `unresolved_retailer_matches.csv`: 378 pairs with candidates.
+- `unresolved_retailer_matches.csv`: 378 pairs with candidates at that point. The file has since been overwritten by the statewide run (see below).
 - `location_municipality_map.csv`
 - `claims_pin_area_meta.json`: all the figures above.
+
+## Statewide sweep (2026-11-10 UTC, owner-approved)
+
+**Method.** This is the pin-area method applied to the whole state.
+- **Domain:** the union of the 351 cartographic-boundary town polygons in `towns_ma.geojson`. These
+  are close to land area; water-only county subdivisions are not in the file. It is buffered by
+  0.3 mi so coastal grid cells are included.
+- **Check grid:** 211,930 points at 0.2 mi spacing. A point counts as covered when it is within
+  `r − 0.151 mi` of a query, where `r` is that call's 100th-nearest distance and 0.151 mi is half
+  the cell diagonal plus 0.01 mi.
+- **Order:** nearest-uncovered-first, growing outward from the pin area, with the same
+  candidate-offset scoring as before.
+- **Seeds:** the 42 pin-area responses plus the 3 earlier sample calls were reused, not refetched.
+  Byte-identical copies are in `sweep_statewide/reused/`.
+- **Requests:** ≥1.3 s between calls, the project User-Agent, a hard cap of 900.
+
+**Calls:** **134 new calls** (all HTTP 200, all n = 100) plus 45 reused, for 179 responses. The
+covered radius per call ranged from 1.08 to 31.7 mi (median 4.58). Raw responses, `manifest.csv`
+(call, source, query point, fetched_at, status, n, max distance, sha256) and `sweep_result.json`
+are in `data/raw/lottery_retailers/sweep_statewide/`.
+
+**Coverage proof.**
+- Grid: 0 of 211,930 check points uncovered.
+- Independent check with 1,000,000 uniform random points over the town polygons: **100.0% of land
+  area covered** (strictly within some call's radius), minimum margin 0.13 mi.
+- **No town is less than fully covered.**
+- As with the pin area, completeness holds with respect to the Lottery's coordinates.
+
+**Retailers:** `data/processed/retailers_ma.csv` has **7,039 unique `retailerId`s**, with the
+pin-area columns plus `covered`.
+- `covered` means the Lottery point is strictly inside some call's radius. It is true for 7,038.
+  The exception is a Milford store whose Lottery point is 41 mi from its address; it is flagged.
+- 8 retailers have a Lottery point outside every MA town polygon.
+- Retailers fall in 313 municipalities. Run metadata is in `retailers_ma_meta.json`.
+- So the locator lists about 7,000 current agents, a little below the secondary figures of about
+  7,500 (2018) and 9,732 (2019 audit period).
+
+**Census re-geocode.** The 1,806 pin-area results were reused where the address was unchanged.
+The 5,233 new addresses went in two batches (5,000 + 233), HTTP 200 in 56 s and 3 s. Raw request
+and response pairs are in `data/raw/census_geocoder/`.
+
+| | Retailers |
+| --- | --- |
+| Exact match | 5,817 |
+| Non-exact match | 775 |
+| Tie | 25 |
+| No match | 422 |
+| Lottery vs Census > 0.25 mi | 445 (237 > 1 mi) |
+| **Flagged** (> 0.25 mi, tie or no match) | **892 (12.7%)** |
+| Median disagreement | 0.024 mi |
+| Distinct verified tracts | 1,413 |
+
+**Municipality roll-up, all 419 claim location values.** `location_municipality_map.csv` now covers
+every claim location plus the locator's own town strings: 849 rows, with method and claim count.
+Methods, counting claim locations:
+
+| Method | Locations |
+| --- | --- |
+| Same name | 288 |
+| Inferred from Census-verified retailers in that postal town (≥ 80% in one municipality; e.g. Hyannis, Centerville, Cotuit → Barnstable; Feeding Hills → Agawam; Buzzards Bay → Bourne) | 80 |
+| Direction expanded (`N Reading` → North Reading) | 15 |
+| Boston neighbourhood list (see the pin-area table) | 13 |
+| `-boro` → `-borough` | 9 |
+| Hand-mapped villages (Brant Rock → Marshfield; Manomet, White Horse Bch → Plymouth; Manchaug → Sutton; Sheldonville → Wrentham; South Easton → Easton; the typo Northhampton → Northampton) | 7 |
+| Direction stripped (e.g. `E Weymouth` → Weymouth) | 4 |
+| **Left AMBIGUOUS:** Chestnut Hill (Newton/Brookline; 129 claims), Devens (Ayer/Harvard/Shirley; 47), Bondsville (Palmer/Belchertown; 46) | 3 |
+
+The polygon test and the map agree for 6,138 of 6,144 verified retailers. In the parquet, a claim
+with an ambiguous location takes its matched retailer's municipality.
+
+**Matching:** all 371,879 claims, same tiers as the pin area. Ambiguous matches are never merged.
+- One rule changed: name + municipality (low confidence) is now accepted outside Boston when the
+  store name is unique in that municipality. Examples: "White Rose Pantry, S Easton" → the only one
+  in Easton; "Shaw's #2408, S Easton" → the Shaw's #2408 listed as N Easton.
+- Inside Boston it still needs the retailer's postal town to be ambiguous, so "Mobil, Roxbury" is
+  not matched to the Mobil in E Boston.
+- That tier matched 789 claims across 18 pairs; I reviewed them all by hand.
+
+| Year | Claims | Matched | Placed in Census-verified tract | Matched but tract withheld (flagged geocode) |
+| --- | --- | --- | --- | --- |
+| 2023 (from Nov 9) | 16,878 | 14,942 (88.5%) | 13,170 (78.0%) | 1,772 |
+| 2024 | 131,485 | 118,270 (89.9%) | 103,781 (78.9%) | 14,489 |
+| 2025 | 125,501 | 116,180 (92.6%) | 102,294 (81.5%) | 13,886 |
+| 2026 (to Nov 8) | 98,015 | 92,689 (94.6%) | 81,496 (83.1%) | 11,193 |
+| **All** | **371,879** | **342,081 (92.0%)** | **300,741 (80.9%)** | **41,340** |
+
+- 571 claims have no retailer name.
+- **Unresolved: 879 (retailer, location) pairs, 29,227 claims.** By reason (pairs / claims):
+  - ambiguous 93 / 13,495
+  - no candidate 566 / 11,321
+  - fuzzy look-alikes only 202 / 3,903
+  - store number differs 12 / 410
+  - other Boston neighbourhood 6 / 98
+- Matched claims by confidence: high 323,409, medium 17,883, low 789.
+- The match rate rises with recency because the locator lists only current agents.
+
+**Ten municipalities with the lowest match rate** (municipalities with ≥ 300 claims):
+
+| Municipality | Matched / claims |
+| --- | --- |
+| Hadley | 196 / 490 (40.0%) |
+| East Longmeadow | 657 / 1,062 (61.9%) |
+| Springfield | 4,891 / 7,642 (64.0%) |
+| West Springfield | 1,120 / 1,747 (64.1%) |
+| Maynard | 246 / 362 (68.0%) |
+| Tewksbury | 1,883 / 2,591 (72.7%) |
+| Salem | 1,495 / 1,985 (75.3%) |
+| Adams | 643 / 837 (76.8%) |
+| Beverly | 1,578 / 2,027 (77.8%) |
+| Southwick | 531 / 681 (78.0%) |
+
+The western-MA shortfall is mostly same-name chain stores with several branches in one town. The
+winners list gives no address, so they cannot be told apart: "Pride Station & Store" (Springfield
+912 claims, East Longmeadow 405, Hadley 269), "Racing Mart" and "New World Gas" (Springfield).
+These stay unresolved by design.
+
+**Outputs** (`data/processed/`):
+- `claims_tract_ma.parquet`: one row per matched claim, 342,081 rows, 5,894 retailers,
+  311 municipalities. Columns: `listed_date, game_identifier, game_name, prize_amount_usd,
+  retailer_id, match_method, match_confidence, tract_geoid` (null when the retailer's geocode is
+  flagged; all 1,392 non-null tracts join to `tract_income.csv`), `municipality` (the claim
+  location's municipality).
+- `retailers_ma.csv`, `retailers_ma_meta.json`
+- `location_municipality_map.csv`
+- `retailer_matches_ma.csv`
+- `unresolved_retailer_matches.csv` (now statewide: 879 pairs with candidates)
 
 ## Join strategy to the winners list
 

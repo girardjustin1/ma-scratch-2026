@@ -76,6 +76,8 @@ export interface Coverage {
   /** Claims coverage area. Tracts whose centroid falls outside show no claims data. */
   center: [number, number];
   radiusMiles: number;
+  /** True when the retailer sweep proved every MA tract is covered; no boundary is drawn. */
+  statewide?: boolean;
   dateFrom: IsoDate;
   dateTo: IsoDate;
 }

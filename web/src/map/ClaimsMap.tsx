@@ -112,7 +112,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     <Box sx={{ position: 'relative', width: '100%', height }}>
       <MapGL
         key={mode /* re-create so the hatch matches the theme */}
-        initialViewState={{ longitude: coverage.center[0], latitude: coverage.center[1], zoom: 10.4 }}
+        initialViewState={{ longitude: pin[0], latitude: pin[1], zoom: 10.4 }}
         {...(viewState ? { ...viewState } : {})}
         onMove={onMove ? (e) => onMove(e.viewState) : undefined}
         mapStyle={baseStyle(mode, basemap)}
@@ -153,9 +153,11 @@ export function ClaimsMap(props: ClaimsMapProps) {
           />
           <Layer id="tract-line" type="line" paint={{ 'line-color': c.surface, 'line-width': 0.6, 'line-opacity': 0.9 }} />
         </Source>
-        <Source id="coverage" type="geojson" data={coverageRing}>
-          <Layer id="coverage-line" type="line" paint={{ 'line-color': c.ink, 'line-width': 1.6, 'line-opacity': 0.85 }} />
-        </Source>
+        {!coverage.statewide && (
+          <Source id="coverage" type="geojson" data={coverageRing}>
+            <Layer id="coverage-line" type="line" paint={{ 'line-color': c.ink, 'line-width': 1.6, 'line-opacity': 0.85 }} />
+          </Source>
+        )}
         <Source id="radius" type="geojson" data={radiusRing}>
           <Layer
             id="radius-line"

@@ -49,6 +49,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
       min: values.length ? Math.min(...values) : 0,
       max: values.length ? Math.max(...values) : 0,
       tractCount: shown.length,
+      claimsInRadius: shown.reduce((sum, m) => sum + (m.claims ?? 0), 0),
       noDataCount: shown.length - values.length,
     };
   }, [data, filters, metric]);
@@ -95,7 +96,7 @@ export function ExplorePage({
             <Box sx={{ flex: 1 }} />
             <CoverageChip coverage={data.coverage} />
             <Typography variant="caption" className="tabular">
-              {fmtInt(a.claims.length)} {LABELS.listedClaims.toLowerCase()} · {fmtInt(covered)} covered tracts in radius
+              {fmtInt(a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius · {fmtInt(covered)} covered tracts
             </Typography>
           </Stack>
           <FilterBar

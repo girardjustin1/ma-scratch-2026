@@ -20,7 +20,7 @@ const miles = (a: [number, number], b: [number, number]) =>
   distance(point(a), point(b), { units: 'miles' });
 
 export function isCovered(centroid: [number, number], coverage: Coverage) {
-  return miles(centroid, coverage.center) <= coverage.radiusMiles;
+  return coverage.statewide === true || miles(centroid, coverage.center) <= coverage.radiusMiles;
 }
 
 export function filterClaims(claims: Claim[], games: GameRef[], filters: Filters, coverage: Coverage) {

@@ -1,11 +1,14 @@
-"""Build the prototype's local map view from real data around the owner's pin.
+"""Build the prototype's local map view from real data: statewide (default) or the pin area.
 
-Writes web/public/local/pin_area.json, which is GITIGNORED: it holds Lottery rows, and the
+Writes web/public/local/view.json, which is GITIGNORED: it holds Lottery rows, and the
 Lottery's terms forbid redistribution. The prototype loads it if present; Storybook never
 does and stays on sample data.
 
-    uv run --with duckdb python3 scripts/build_local_view.py
+    uv run --with duckdb python3 scripts/build_local_view.py            # statewide
+    uv run --with duckdb python3 scripts/build_local_view.py --pin-area # 10 mi around the pin
 """
+
+import sys
 
 import json
 import math
@@ -16,7 +19,7 @@ import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
 P = ROOT / "data/processed"
-OUT = ROOT / "web/public/local/pin_area.json"
+OUT = ROOT / "web/public/local/view.json"
 TRACT_RADIUS_MI = 12  # draw a ring of no-data tracts beyond the 10 mi coverage edge
 COVERAGE_MI = 10  # the retailer sweep is proven complete to this radius
 RELEASE = "2020-2024"
@@ -43,14 +46,18 @@ def round_coords(x):
 
 
 def main():
+    statewide = "--pin-area" not in sys.argv
     pin = load_pin()
     con = duckdb.connect()
+    claims_file = P / ("claims_tract_ma.parquet" if statewide else "claims_pin_area.parquet")
+    retailers_file = P / ("retailers_ma.csv" if statewide else "retailers_pin_area.csv")
+    in_area = "covered" if statewide else "within_complete_radius"
 
     tracts = []
     for f in json.loads((P / "tracts_ma.geojson").read_text())["features"]:
         p = f["properties"]
         c = (p["inner_lon"], p["inner_lat"])
-        if miles(c, pin) <= TRACT_RADIUS_MI:
+        if statewide or miles(c, pin) <= TRACT_RADIUS_MI:
             tracts.append({
                 "type": "Feature",
                 "geometry": {"type": f["geometry"]["type"], "coordinates": round_coords(f["geometry"]["coordinates"])},
@@ -74,8 +81,8 @@ def main():
         {"id": str(rid), "name": name, "address": addr, "town": town, "lon": lon, "lat": lat, "tractGeoid": tract}
         for rid, name, addr, town, lon, lat, tract in con.execute(
             f"SELECT retailer_id, name, address, town, census_lon, census_lat, lpad(tract_geoid::VARCHAR, 11, '0') "
-            f"FROM read_csv_auto('{P / 'retailers_pin_area.csv'}') "
-            f"WHERE within_complete_radius AND tract_geoid IS NOT NULL AND NOT coalesce(coord_flag, false) "
+            f"FROM read_csv_auto('{retailers_file}') "
+            f"WHERE {in_area} AND tract_geoid IS NOT NULL AND NOT coalesce(coord_flag, false) "
             f"AND census_lon IS NOT NULL"
         ).fetchall()
     ]
@@ -83,7 +90,7 @@ def main():
 
     rows = con.execute(
         f"SELECT strftime(listed_date, '%Y-%m-%d'), game_identifier, game_name, prize_amount_usd, retailer_id::VARCHAR "
-        f"FROM read_parquet('{P / 'claims_pin_area.parquet'}') WHERE tract_geoid IS NOT NULL ORDER BY listed_date"
+        f"FROM read_parquet('{claims_file}') WHERE tract_geoid IS NOT NULL ORDER BY listed_date"
     ).fetchall()
     rows = [r for r in rows if r[4] in placed]
 
@@ -98,7 +105,8 @@ def main():
 
     out = {
         "note": "LOCAL ONLY. Mass Lottery data: personal, non-commercial use; do not redistribute.",
-        "coverage": {"label": f"{COVERAGE_MI} mi around your pin", "center": list(pin), "radiusMiles": COVERAGE_MI,
+        "coverage": {"label": "statewide" if statewide else f"{COVERAGE_MI} mi around your pin", "center": list(pin),
+                     "radiusMiles": 0 if statewide else COVERAGE_MI, "statewide": statewide,
                      "dateFrom": rows[0][0], "dateTo": rows[-1][0]},
         "tracts": {"type": "FeatureCollection", "features": tracts},
         "income": income,

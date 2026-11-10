@@ -9,9 +9,10 @@ No data bundle was supplied, so this audit covers the data we fetched from offic
 The three-year statewide claims window, income and tract polygons are complete. Two gaps
 shape the build:
 
-1. **Claims are located by town, not by address.** Placing claims in tracts needs a licensed
-   retailer list, and none exists statewide. We swept the owner's pin area (complete to 10 mi).
-   Outside that circle, claims can only be shown by town.
+1. **Claims are located by town, not by address.** No statewide retailer list exists, so we
+   built one by sweeping the Lottery's store locator. Coverage is proven for 100% of land, with
+   7,039 retailers. 92.0% of scratch claims match a retailer, and 80.9% land in a
+   Census-verified tract.
 2. **The listed date behaves like a claim-processing date.** Mondays carry 23% of scratch rows
    and weekends 7.5%. The PRD's weekday test would measure the Lottery's office schedule, not
    buying patterns.
@@ -23,7 +24,9 @@ shape the build:
 | `claims_all.parquet` | Parquet | 566,382 | 2023-11-09 → 2026-11-08 (1,096 days) | Statewide, 425 location values |
 | `claims_scratch.parquet` | Parquet | 371,879 | same (1,095 days with scratch rows) | Statewide, 419 location values, 208 games |
 | `claims_per_day.csv` | CSV | 1,096 | same | Daily totals |
-| `retailers_pin_area.csv` | CSV | 1,806 | Swept 2026-11-10 | 1,483 inside the proven-complete 10 mi circle; 79 towns |
+| `retailers_ma.csv` | CSV | 7,039 | Swept 2026-11-10 | Statewide, 100% of land proven covered; 892 flagged geocodes |
+| `claims_tract_ma.parquet` | Parquet | 342,081 | 2023-11-09 → 2026-11-08 | Scratch claims matched to a retailer; 300,741 with a verified tract |
+| `retailers_pin_area.csv` | CSV | 1,806 | Swept 2026-11-10 | First sweep: 1,483 inside the 10 mi circle around the owner's pin |
 | `claims_pin_area.parquet` | Parquet | 70,638 | 2023-11-09 → 2026-11-08 | Scratch claims matched to retailers in the 10 mi circle |
 | `location_municipality_map.csv` | CSV | — | — | Place string → municipality (neighbourhoods rolled up) |
 | `unresolved_retailer_matches.csv` | CSV | 216 | — | Never merged |
@@ -80,12 +83,13 @@ Also in the claims data:
 **Retailers**
 
 6. **No statewide list.** The Lottery's locator returns the 100 nearest stores only. The PRD
-   assumed a supplied file.
+   assumed a supplied file. We built one with 179 locator calls.
 7. **Current list only.** Stores that closed since 2023 are missing, so older claims match less
    often. Most of the 160 unresolved pairs with no candidate are likely closed stores.
-8. **Lottery coordinates are unreliable.** 128 of 1,483 retailers (8.6%) are flagged: 63
-   disagree with Census by more than 0.25 mi (42 by more than 1 mi), and 65 have no unique
-   Census match. Use Census coordinates and tract; leave flagged retailers unplaced.
+8. **Lottery coordinates are unreliable.** Statewide, 892 of 7,039 retailers (12.7%) are flagged:
+   they disagree with Census by more than 0.25 mi, or have no unique Census match. Use Census
+   coordinates and tract, and leave flagged retailers unplaced. 41,340 matched claims are withheld
+   from tracts for this reason.
 
 **Games and prizes**
 
@@ -122,13 +126,13 @@ Also in the claims data:
 
 | Dataset | Area | Dates | Notes |
 | --- | --- | --- | --- |
-| `claims_town` | Statewide, by municipality (after roll-up) | 2023-11-09 → 2026-11-08 | Scratch only, over $600, by the selling retailer's place. Gap days: 2024-04-28 (0 scratch rows), Thanksgivings, 2026-01-26 and 2026-02-23 (low, unexplained) |
-| `claims_tract` | Circle of 10 mi around the owner's pin (complete retailer sweep) | same | Only claims matched to a Census-verified retailer: 91.3% matched within 10 mi, and 3,582 more are dropped for flagged geocodes. Tracts outside the circle are no data. Counts are a floor, not a total |
-| `retailers` | same circle | as of 2026-11-10 | Current list; not historical |
+| `claims_town` | Statewide, by municipality (after roll-up; Chestnut Hill, Devens, Bondsville ambiguous) | 2023-11-09 → 2026-11-08 | Scratch only, over $600, by the selling retailer's place. Gap days: 2024-04-28 (0 scratch rows), Thanksgivings, 2026-01-26 and 2026-02-23 (low, unexplained) |
+| `claims_tract` | Statewide (retailer sweep proven complete over 100% of land) | same | Only claims matched to a Census-verified retailer: 80.9% of scratch claims (78.0% in 2023 rising to 83.1% in 2026). Counts are a floor, not a total. Lowest municipal match rates: Hadley 40.0%, East Longmeadow 61.9%, Springfield 64.0% |
+| `retailers` | Statewide | as of 2026-11-10 | Current list; not historical |
 | `tract_income` | Statewide | ACS 2019–2023, 2020–2024 | Two overlapping vintages, not a year-over-year change |
 | `prize_tiers` | Statewide | current + Wayback spots 2025-01 → 2026-10 | Spot coverage |
 
 ## Decisions needed
 
-- Whether to sweep retailers statewide (about 300–800 locator calls) to unlock tract-level
-  claims beyond the pin area.
+- How to treat municipalities with low match rates (for example Hadley, Springfield). Options:
+  flag them on the map, or show them by town only.

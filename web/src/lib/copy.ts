@@ -29,6 +29,6 @@ export const CAVEATS = {
 } as const;
 
 export const LOCAL_NOTICE =
-  'Map and listing schedule: real Lottery-listed claims around your pin, kept on this computer only. Open games, EV, the statistical tests and Model still show sample data.';
+  'Map and listing schedule: real Lottery-listed claims, statewide, kept on this computer only. Open games, EV, the statistical tests and Model still show sample data.';
 
 export const SAMPLE_NOTICE = 'Design preview: tract shapes and income are real Census data. Claims, games, retailers and estimates are sample data, not real Lottery activity.';

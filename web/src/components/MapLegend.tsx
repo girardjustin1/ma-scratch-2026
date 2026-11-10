@@ -65,8 +65,10 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
       </Stack>
       <Box sx={{ mt: 1.25, pt: 1, borderTop: 1, borderColor: 'divider' }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
-          <Box sx={{ width: 22, borderTop: 2, borderColor: 'text.primary' }} />
-          <Typography variant="caption">Coverage boundary · {fmtRange(coverage.dateFrom, coverage.dateTo)}</Typography>
+          {!coverage.statewide && <Box sx={{ width: 22, borderTop: 2, borderColor: 'text.primary' }} />}
+          <Typography variant="caption">
+            {coverage.statewide ? 'Coverage: statewide' : 'Coverage boundary'} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
+          </Typography>
         </Stack>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Box sx={{ width: 22, borderTop: '2px dashed', borderColor: 'text.secondary' }} />
