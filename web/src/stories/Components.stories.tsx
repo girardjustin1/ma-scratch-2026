@@ -5,6 +5,7 @@ import { computeTractMetrics, filterClaims } from '../domain/metrics';
 import { CaveatNote, CoverageChip, IncomeValue } from '../components/Basics';
 import { TractTooltip } from '../components/TractTooltip';
 import { MapLegend } from '../components/MapLegend';
+import { groupWinners } from '../domain/winners';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
 import { GamePicker } from '../components/GamePicker';
 import { DetailPanel } from '../components/DetailDrawer';
@@ -78,8 +79,20 @@ export const Legend: StoryObj<{ metric: MetricKey; lowMatchCount: number }> = {
   argTypes: { metric: { control: 'inline-radio', options: ['claims', 'income', 'perRetailer'] } },
   render: ({ metric, lowMatchCount }) => (
     <MapLegend lowMatchCount={lowMatchCount} metric={metric} breaks={metric === 'income' ? [62000, 81000, 99000, 124000] : metric === 'claims' ? [1, 2, 4, 7] : [0.5, 1, 2, 3.5]}
-      min={metric === 'income' ? 31000 : 0} max={metric === 'income' ? 210000 : 19} tractCount={104} noDataCount={12} coverage={S.coverage} />
+      min={metric === 'income' ? 31000 : 0} max={metric === 'income' ? 210000 : 19} tractCount={104} noDataCount={12} coverage={S.coverage}
+      winners={sampleWinners} />
   ),
+};
+
+/** Synthetic claims grouped for the legend's "Winners by ticket" section. Row clicks are inert here. */
+const sampleWinners = {
+  rows: {
+    price: groupWinners(S.claims, S.gameRefs, 'price'),
+    prize: groupWinners(S.claims, S.gameRefs, 'prize'),
+    game: groupWinners(S.claims, S.gameRefs, 'game'),
+  },
+  active: { price: ['10'], prize: [], game: [] },
+  onPick: () => {},
 };
 
 export const Filters_: Story = {

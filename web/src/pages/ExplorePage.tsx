@@ -20,6 +20,8 @@ import { StoreCard, TractCard, type PanelTab, type StoreTrend, type TrendWindow 
 import { PlaceDetails } from '../components/PlaceDetails';
 import { addDays, daysBetween, fmtDate, fmtInt } from '../lib/format';
 import { LABELS } from '../lib/copy';
+import { groupWinners, type WinnerGrouping, type WinnerRow } from '../domain/winners';
+import type { WinnersKeyProps } from '../components/WinnersKey';
 
 export interface ExploreData {
   tracts: TractCollection;
@@ -237,6 +239,33 @@ export function ExplorePage({
     : selection?.kind === 'tract' && selTract && selMetrics
       ? { kind: 'tract', tract: selTract, metrics: selMetrics, stores: tractStores }
       : null;
+  // Winners by ticket: listed claims in the radius (same tracts as the header count), grouped
+  // by price, prize size or game. Each grouping ignores its own filter so every group stays
+  // visible to pick.
+  const winnerRows = useMemo(() => {
+    const tracts = new Set(a.metrics.filter((m) => m.inRadius && m.covered).map((m) => m.geoid));
+    const stores = new Set(data.retailers.filter((r) => tracts.has(r.tractGeoid)).map((r) => r.id));
+    const inRadius = (f: Filters) =>
+      filterClaims(data.claims, data.games, f, data.coverage).filter((c) => stores.has(c.retailerId));
+    return {
+      price: groupWinners(inRadius({ ...filters, prices: [] }), data.games, 'price'),
+      prize: groupWinners(inRadius({ ...filters, prizeBand: 'all' }), data.games, 'prize'),
+      game: groupWinners(inRadius({ ...filters, gameIds: [] }), data.games, 'game'),
+    } satisfies Record<WinnerGrouping, WinnerRow[]>;
+  }, [data, filters, a.metrics]);
+  const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const winners: WinnersKeyProps = {
+    rows: winnerRows,
+    active: {
+      price: filters.prices.map(String),
+      prize: filters.prizeBand === 'all' ? [] : [filters.prizeBand],
+      game: filters.gameIds,
+    },
+    onPick: (by, id) => setFilters((f) =>
+      by === 'price' ? { ...f, prices: toggle(f.prices.map(String), id).map(Number) }
+        : by === 'prize' ? { ...f, prizeBand: f.prizeBand === id ? 'all' : (id as Filters['prizeBand']) }
+          : { ...f, gameIds: toggle(f.gameIds, id) }),
+  };
   const covered = a.metrics.filter((m) => m.inRadius && m.covered).length;
 
   const mapProps = {
@@ -294,7 +323,8 @@ export function ExplorePage({
           )}
           <div className={legendBox}>
             <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
-              bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined} />
+              bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined}
+              winners={winners} />
           </div>
           <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
             Click a store or tract for recent claims and actions · double-click to move the pin
