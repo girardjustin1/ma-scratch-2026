@@ -10,6 +10,7 @@ import { fmtCompactUsd, fmtInt, fmtRange } from '../lib/format';
 import { useMode } from '../theme/mode';
 import { bubbleRadii, bubbles as bubbleTokens, chrome, noData, ramps, status } from '../theme/tokens';
 import { Card } from './Basics';
+import { WinnersKey, type WinnersKeyProps } from './WinnersKey';
 
 const TITLES: Record<MetricKey, string> = {
   claims: LABELS.listedClaims,
@@ -37,6 +38,8 @@ export interface MapLegendProps {
   bubbles?: { breaks: number[]; min: number; max: number; stores: number; hotMin?: number | null };
   /** Makes the store key interactive: show/hide by class and list the stores in view. */
   storeControls?: StoreKeyControls;
+  /** Listed claims grouped by ticket price, prize size and game (collapsible). */
+  winners?: WinnersKeyProps;
 }
 
 /** Fixed-size slot so every key mark lines up with its label. */
@@ -48,7 +51,7 @@ const Key = ({ children }: { children: React.ReactNode }) => (
  * Monochrome card. The only colors are the swatches that key the map, taken from the same
  * tokens the map paints with, so the legend always matches what is drawn.
  */
-export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls }: MapLegendProps) {
+export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls, winners }: MapLegendProps) {
   const mode = useMode();
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
   const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v), metric === 'claims');
@@ -86,6 +89,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
         </li>
       </ul>
       {bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} controls={storeControls} />}
+      {winners && <WinnersKey {...winners} />}
       <div className="mt-3 flex flex-col gap-1.5 border-t border-secondary pt-3">
         <div className="flex items-center gap-2">
           {!coverage.statewide && <Key><span className="w-full" style={{ borderTop: `2px solid ${ink}`, opacity: 0.85 }} /></Key>}
