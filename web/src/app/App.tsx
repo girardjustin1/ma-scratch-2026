@@ -5,7 +5,8 @@ import { AppShell, type TabKey } from './AppShell';
 import { RoutingContext, TAB_PATHS, tabFromPath } from './route';
 import { ExplorePage } from '../pages/ExplorePage';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
-import { EmailsPage } from '../pages/EmailsPage';
+import { ReportsPage } from '../pages/ReportsPage';
+import { useReports } from '../reports/useReports';
 import type { ExploreData } from '../pages/ExplorePage';
 import type { Filters } from '../domain/types';
 import { loadLocalView } from '../data/localView';
@@ -36,7 +37,16 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
   useEffect(() => {
     if (useLocal) loadLocalView().then((d) => { setLocal(d); setLoaded(true); });
   }, [useLocal]);
-  const [tab, setTabState] = useState<TabKey>(() => (routed ? tabFromPath(window.location.pathname) ?? initialTab : initialTab));
+  const [tab, setTabState] = useState<TabKey>(() => {
+    if (!routed) return initialTab;
+    // Old /emails?email=… links open the same report type under /reports (before any page reads the URL).
+    if (window.location.pathname.replace(/\/+$/, '') === '/emails') {
+      const t = new URLSearchParams(window.location.search).get('email');
+      window.history.replaceState(null, '', `/reports${t ? `?type=${encodeURIComponent(t)}` : ''}`);
+    }
+    return tabFromPath(window.location.pathname) ?? initialTab;
+  });
+  const reports = useReports(useLocal);
   // Back/forward: re-read the tab, and remount the page so it re-reads its query params.
   const [nav, setNav] = useState(0);
   useEffect(() => {
@@ -58,7 +68,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
     <RoutingContext.Provider value={routed}>
     <ModeProvider mode={mode}>
       <AppShell tab={tab} onTab={setTab} online={online} mode={mode} onToggleMode={() => setMode(mode === 'dark' ? 'light' : 'dark')}
-        notice={local ? LOCAL_NOTICE : SAMPLE_NOTICE}>
+        notice={local ? LOCAL_NOTICE : SAMPLE_NOTICE} unreadReports={reports.unread}>
         {/* Keyed so back/forward remounts the page and it re-reads its deep link. */}
         <Fragment key={`${tab}-${nav}`}>
         {!loaded && <p className="p-6 text-sm text-tertiary">Loading the local data…</p>}
@@ -81,7 +91,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         )}
         {tab === 'model' && <ModelPage gate={S.mlGate} />}
         {tab === 'data' && <DataPage sources={S.sources} online={online} onToggleOnline={setOnline} coverage={S.coverage} />}
-        {tab === 'emails' && <EmailsPage data={local} />}
+        {tab === 'reports' && <ReportsPage index={reports.index} seen={reports.seen} />}
         </>}
         </Fragment>
       </AppShell>

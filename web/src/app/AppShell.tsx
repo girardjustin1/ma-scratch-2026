@@ -4,7 +4,7 @@ import { ButtonUtility } from '@/components/base/buttons/button-utility';
 import { OnlineChip } from '../components/SourcesPanel';
 import { SampleBanner } from '../components/Basics';
 
-export type TabKey = 'map' | 'games' | 'ev' | 'stats' | 'model' | 'data' | 'emails';
+export type TabKey = 'map' | 'games' | 'ev' | 'stats' | 'model' | 'data' | 'reports';
 export const TABS: { key: TabKey; label: string }[] = [
   { key: 'map', label: 'Map' },
   { key: 'games', label: 'Open games' },
@@ -12,7 +12,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: 'stats', label: 'Statistics' },
   { key: 'model', label: 'Model' },
   { key: 'data', label: 'Data' },
-  { key: 'emails', label: 'Emails' },
+  { key: 'reports', label: 'Reports' },
 ];
 
 export interface AppShellProps {
@@ -23,10 +23,12 @@ export interface AppShellProps {
   onToggleMode?: () => void;
   /** Banner stating which data is real and which is sample. */
   notice?: string;
+  /** Unread published reports: a count on the Reports tab (in-app only, never a system notification). */
+  unreadReports?: number;
   children: React.ReactNode;
 }
 
-export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, children }: AppShellProps) {
+export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, unreadReports = 0, children }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col bg-secondary">
       <header className="flex h-14 shrink-0 items-center gap-8 border-b border-secondary bg-primary px-6">
@@ -40,8 +42,10 @@ export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, child
           </div>
         </div>
         <Tabs selectedKey={tab} onSelectionChange={(k) => onTab(k as TabKey)} className="w-auto">
-          <Tabs.List type="button-gray" size="sm" items={TABS.map((t) => ({ id: t.key, label: t.label }))}>
-            {(item) => <Tabs.Item id={item.id} label={item.label} />}
+          <Tabs.List type="button-gray" size="sm"
+            items={TABS.map((t) => ({ id: t.key, label: t.label, badge: t.key === 'reports' && unreadReports > 0 ? unreadReports : undefined }))}>
+            {(item) => <Tabs.Item id={item.id} label={item.label} badge={item.badge}
+              aria-label={item.badge ? `${item.label}, ${item.badge} new` : undefined} />}
           </Tabs.List>
         </Tabs>
         <div className="flex-1" />

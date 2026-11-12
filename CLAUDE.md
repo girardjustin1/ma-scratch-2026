@@ -49,18 +49,23 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
 - Pace describes how fast prizes HAVE been claimed, statewide. Never per store, never "due".
   Show the statewide-trend line with it: a market slowdown makes many games "behind".
 
-## Insights emails
+## Reports (in the app; never emailed)
 
-- `web/src/emails/`: React Email templates for sending with Resend. Three so far: weekly
-  insights (trends, analysis, what's new), featured tickets, and +EV watch. Inline styles
-  and tables (email clients), same monochrome look; shared parts in `parts.tsx`.
-- Templates only lay out data passed in (`types.ts`); they compute nothing from claims.
-- Same honesty rules as the app. Owner asked for +EV in email (2026-11-10): every estimate
-  above 100% carries "Check inputs" and a reason, with the statewide banner; never call one
-  a sure thing. Describe the area as "your pin", never the address.
-- Stories (`Emails`) use `emails/fixtures.ts`, which is SYNTHETIC. Real emails are built
-  from local data and never committed. Sending real data through Resend is the owner's
-  call each time it is set up; nothing sends yet.
+- Owner decision 2026-11-12: reports live in the app's Reports tab only. Nothing is emailed or
+  sent anywhere; the Resend plan is dropped. Do not add sending.
+- Designs: `web/src/emails/` React Email templates (inline styles, monochrome; shared parts in
+  `parts.tsx`), rendered to HTML in the browser. They only lay out data passed in (`types.ts`).
+- Publishing: `web/src/reports/reports.ts` (schedule, backfill, unread) and
+  `web/scripts/publish-reports.ts` (`npm --prefix web run reports:publish`, run by the daily
+  data job). Issues are frozen JSON under gitignored `web/public/local/reports/`; an existing
+  issue is never rebuilt. Weekly Mon–Sun on Mondays, monthly on the 1st, featured and +EV
+  weekly only with a prize table saved after the week, nearby daily when claims are listed
+  within 1 mi. First run backfills (marked, never unread).
+- Notification is in-app only: unread count on the Reports tab and "new" markers, kept in this
+  browser's localStorage. No system notifications.
+- Honesty rules as in the app: every +EV estimate above 100% carries "Check inputs" and a
+  reason, never "a sure thing"; the area is "your pin", never the address.
+- Stories use SYNTHETIC `emails/fixtures.ts` and `fixtures/sampleReports.ts`.
 
 ## Data handling
 

@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 5180",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
+    "reports:publish": "tsx scripts/publish-reports.ts",
     "storybook": "storybook dev -p 6020 --host 127.0.0.1 --no-open",
     "build-storybook": "storybook build"
   },
@@ -43,6 +44,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "storybook": "^10.6.6",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.7"
   }

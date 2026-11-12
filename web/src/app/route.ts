@@ -8,11 +8,12 @@ import type { TabKey } from './AppShell';
  * The search pin is never written to the URL.
  */
 export const TAB_PATHS: Record<TabKey, string> = {
-  map: '/', games: '/games', ev: '/ev', stats: '/stats', model: '/model', data: '/data', emails: '/emails',
+  map: '/', games: '/games', ev: '/ev', stats: '/stats', model: '/model', data: '/data', reports: '/reports',
 };
 
 export function tabFromPath(path: string): TabKey | null {
   const p = path.replace(/\/+$/, '') || '/';
+  if (p === '/emails') return 'reports'; // old links; App rewrites the URL to /reports
   const hit = Object.entries(TAB_PATHS).find(([, v]) => v === p);
   return hit ? (hit[0] as TabKey) : null;
 }
