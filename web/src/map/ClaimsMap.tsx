@@ -8,6 +8,7 @@ import { useMode } from '../theme/mode';
 import { classOf } from '../domain/classify';
 import { metricValue } from '../domain/metrics';
 import type { Coverage, MetricKey, Retailer, TractCollection, TractMetrics } from '../domain/types';
+import type { HexLayer } from '../domain/hexes';
 import { bubbleRadii, bubbles, chrome, pin as pinColor, ramps, status, type Mode } from '../theme/tokens';
 import { StorePin } from './StorePin';
 import { STORE_CLAIMS_MAX } from '../components/Controls';
@@ -36,6 +37,9 @@ export interface ClaimsMapProps {
   hotMin?: number | null;
   /** Store classes switched off in the legend (0–4 by bubbleBreaks; 5 = hottest; -1 = no listed claims). */
   hiddenClasses?: Set<number>;
+  /** Hexagon layer (domain/hexes.ts): when set, it replaces the tract fill. */
+  hexes?: HexLayer | null;
+  onSelectHex?: (cell: string, lngLat: [number, number]) => void;
   /** Called with the visible bounds [west, south, east, north] whenever the map settles. */
   onBounds?: (b: [number, number, number, number]) => void;
   coverage: Coverage;
@@ -92,6 +96,7 @@ const onMarker = (ev: Event) => ev.target instanceof Element && !!ev.target.clos
 export type MapSelection =
   | { kind: 'store'; id: string }
   | { kind: 'tract'; geoid: string; lngLat: [number, number] }
+  | { kind: 'hex'; cell: string; lngLat: [number, number] }
   | null;
 
 /** Zoom at which store bubbles give way to labelled pins, and names appear. */
@@ -106,7 +111,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
     tracts, metrics, metric, breaks, retailers: allRetailers, claimsByRetailer, storesInRadius, bubbleBreaks, coverage, pin, radiusMiles,
     storeRange = [0, STORE_CLAIMS_MAX], hiddenClasses, onBounds, hotMin = null, playing = false,
     tractOpacity = 0.78, bubbleOpacity = 0.9, showBubbles = true, basemap = 'outline',
-    viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null,
+    viewState, onMove, onPinChange, onSelectTract, onSelectStore, onClearSelection, selection = null, pinned = null, hexes = null, onSelectHex,
     height = '100%',
   } = props;
   const mode = useMode();
@@ -284,7 +289,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
         onMove={onMove ? (e) => onMove(e.viewState) : undefined}
         mapStyle={mapStyle}
         onLoad={onLoad}
-        interactiveLayerIds={showBubbles ? ['group-in', 'store-in', 'store-out', 'tract-fill', 'tract-nodata'] : ['tract-fill', 'tract-nodata']}
+        interactiveLayerIds={[...(showBubbles ? ['group-in', 'store-in', 'store-out'] : []), ...(hexes ? ['hex-fill'] : ['tract-fill', 'tract-nodata'])]}
         onIdle={() => {
           refreshGroupLabels();
           placeCard();
@@ -313,6 +318,10 @@ export function ClaimsMap(props: ClaimsMapProps) {
             onSelectStore?.(String(f.properties?.id));
             return;
           }
+          if (f?.layer.id === 'hex-fill') {
+            onSelectHex?.(String(f.properties?.cell), [e.lngLat.lng, e.lngLat.lat]);
+            return;
+          }
           if (f) onSelectTract?.(String(f.properties?.geoid), [e.lngLat.lng, e.lngLat.lat]);
           else onClearSelection?.();
         }}
@@ -328,6 +337,7 @@ export function ClaimsMap(props: ClaimsMapProps) {
         <Source id="tracts" type="geojson" data={data}>
           <Layer
             id="tract-fill"
+            layout={{ visibility: hexes ? 'none' : 'visible' }}
             type="fill"
             filter={['>=', ['get', 'cls'], 0]}
             paint={{
@@ -337,13 +347,16 @@ export function ClaimsMap(props: ClaimsMapProps) {
           />
           <Layer
             id="tract-nodata"
+            layout={{ visibility: hexes ? 'none' : 'visible' }}
             type="fill"
             filter={['<', ['get', 'cls'], 0]}
             paint={{ 'fill-pattern': 'hatch', 'fill-opacity': Math.min(1, tractOpacity + 0.1) }}
           />
-          <Layer id="tract-line" type="line" paint={{ 'line-color': c.surface, 'line-width': 0.6, 'line-opacity': 0.9 }} />
+          <Layer id="tract-line" type="line" layout={{ visibility: hexes ? 'none' : 'visible' }}
+            paint={{ 'line-color': c.surface, 'line-width': 0.6, 'line-opacity': 0.9 }} />
           <Layer
             id="tract-lowmatch"
+            layout={{ visibility: hexes ? 'none' : 'visible' }}
             type="line"
             filter={['==', ['get', 'lowMatch'], 1]}
             paint={{ 'line-color': status.warning, 'line-width': 1.6, 'line-dasharray': [1.5, 1.5] }}
@@ -356,6 +369,25 @@ export function ClaimsMap(props: ClaimsMapProps) {
             filter={['==', ['get', 'geoid'], selection?.kind === 'tract' ? selection.geoid : '']}
             paint={{ 'line-color': c.ink, 'line-width': 2.5 }} />
         </Source>
+        {hexes && (
+          <Source id="hexes" type="geojson" data={hexes.features}>
+            <Layer
+              id="hex-fill"
+              type="fill"
+              paint={{
+                'fill-color': fillColor as never,
+                'fill-opacity': ['case', ['==', ['get', 'inRadius'], 1], tractOpacity, tractOpacity * 0.35],
+              }}
+            />
+            <Layer id="hex-line" type="line" paint={{ 'line-color': c.surface, 'line-width': 0.8, 'line-opacity': 0.9 }} />
+            <Layer id="hex-selected-casing" type="line"
+              filter={['==', ['get', 'cell'], selection?.kind === 'hex' ? selection.cell : '']}
+              paint={{ 'line-color': '#ffffff', 'line-width': 5 }} />
+            <Layer id="hex-selected" type="line"
+              filter={['==', ['get', 'cell'], selection?.kind === 'hex' ? selection.cell : '']}
+              paint={{ 'line-color': c.ink, 'line-width': 2.5 }} />
+          </Source>
+        )}
         {!coverage.statewide && (
           <Source id="coverage" type="geojson" data={coverageRing}>
             <Layer id="coverage-line" type="line" paint={{ 'line-color': c.ink, 'line-width': 1.6, 'line-opacity': 0.85 }} />

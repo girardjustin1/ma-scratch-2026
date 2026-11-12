@@ -31,6 +31,8 @@ export const CAVEATS = {
   notAdvice: 'This describes public Lottery records. It is not advice to buy tickets.',
   pace:
     'Pace compares how fast this game’s prizes have been claimed with games of the same price at the same age (launched since the winners list began). It describes the past, statewide. It says nothing about which store, roll or ticket holds the prizes still left.',
+  hexes:
+    'Hexagons add up the listed claims of the stores inside them. They show where claims were listed, which mostly follows how many tickets those stores sell; they are not a forecast of where the next one will be.',
   matchedOnly:
     'Counts are a floor: claims at stores that could not be matched by name and town, or whose location could not be verified, are left out.',
 } as const;

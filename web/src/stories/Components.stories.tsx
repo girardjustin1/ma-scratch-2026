@@ -21,6 +21,7 @@ import { ListingSchedule } from '../components/ListingSchedule';
 import { CAVEATS } from '../lib/copy';
 import { addDays } from '../lib/format';
 import type { Filters, MetricKey } from '../domain/types';
+import type { AreaShape } from '../domain/hexes';
 
 const meta: Meta = { title: 'Components' };
 export default meta;
@@ -129,10 +130,15 @@ export const MetricSwitch: Story = {
   },
 };
 
+export const MetricSwitchHexagons: Story = {
+  name: 'Metric switch · hexagons (claims only)',
+  render: () => <MetricSwitcher value="claims" onChange={() => {}} claimsOnly />,
+};
+
 export const Layers: StoryObj<{ online: boolean }> = {
   args: { online: false },
   render: ({ online }) => {
-    const [s, setS] = useState({ tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: 'outline' as const });
+    const [s, setS] = useState({ areaShape: 'tracts' as AreaShape, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: 'outline' as const });
     return <LayerControls {...s} online={online} onChange={(p) => setS({ ...s, ...(p as typeof s) })} />;
   },
 };

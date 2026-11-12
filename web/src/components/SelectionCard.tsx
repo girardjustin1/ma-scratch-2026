@@ -165,3 +165,37 @@ export function TractCard({
     </Card>
   );
 }
+
+/** A clicked hexagon: its listed claims and stores under the filters, and the latest few. */
+export function HexCard({
+  sizeLabel, stores, claims, games, anchor, onZoom, onClose,
+}: Omit<CommonProps, 'onOpen'> & { sizeLabel: string; stores: Retailer[] }) {
+  const g = new Map(games.map((x) => [x.id, x]));
+  const s = new Map(stores.map((x) => [x.id, x]));
+  const towns = [...new Set(stores.map((r) => r.town))].sort();
+  return (
+    <Card className="w-[320px] p-4 shadow-xl">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-primary">Hexagon</p>
+          <p className="truncate text-xs text-tertiary">{towns.join(', ')} · {sizeLabel}</p>
+        </div>
+        <CloseButton size="sm" slot={null} onPress={onClose} className="-mt-1.5 -mr-2" />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+        <div>
+          <p className="text-xs text-tertiary">{LABELS.listedClaims}</p>
+          <p className="text-lg font-semibold text-primary tabular">{fmtInt(claims.length)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-tertiary">Licensed retailers</p>
+          <p className="text-lg font-semibold text-primary tabular">{fmtInt(stores.length)}</p>
+        </div>
+      </div>
+      <Recent claims={claims} anchor={anchor} games={g} stores={s} />
+      <Actions>
+        <Button size="xs" color="tertiary" iconLeading={ZoomIn} onClick={onZoom}>Zoom in</Button>
+      </Actions>
+    </Card>
+  );
+}
