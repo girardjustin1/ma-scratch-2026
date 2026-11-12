@@ -25,6 +25,11 @@ export const MapSideBySide: StoryObj = {
   render: () => <Frame><ExplorePage data={sampleExploreData} initialFilters={S.defaultFilters} initialCompare /></Frame>,
 };
 
+export const MapHexagons: StoryObj = {
+  name: 'Map · hexagons',
+  render: () => <Frame><ExplorePage data={sampleExploreData} initialFilters={S.defaultFilters} initialArea="hexes" /></Frame>,
+};
+
 export const MapWideRadius: StoryObj = {
   name: 'Map · 12 mi radius (shows no-data beyond coverage)',
   render: () => <Frame><ExplorePage data={sampleExploreData} initialFilters={{ ...S.defaultFilters, radiusMiles: 12 }} /></Frame>,

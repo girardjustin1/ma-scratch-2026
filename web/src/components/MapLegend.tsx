@@ -5,6 +5,7 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 import { trendWindowLabel, type StoreTrend, type TrendWindow } from './SelectionCard';
 import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
+import { hexSizeLabel, type HexLayer } from '../domain/hexes';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtCompactUsd, fmtInt, fmtRange } from '../lib/format';
 import { useMode } from '../theme/mode';
@@ -40,6 +41,8 @@ export interface MapLegendProps {
   storeControls?: StoreKeyControls;
   /** Listed claims grouped by ticket price, prize size and game (collapsible). */
   winners?: WinnersKeyProps;
+  /** The hexagon layer is on: the key describes hexagons instead of tracts. */
+  hexes?: HexLayer | null;
 }
 
 /** Fixed-size slot so every key mark lines up with its label. */
@@ -51,7 +54,10 @@ const Key = ({ children }: { children: React.ReactNode }) => (
  * Monochrome card. The only colors are the swatches that key the map, taken from the same
  * tokens the map paints with, so the legend always matches what is drawn.
  */
-export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls, winners }: MapLegendProps) {
+export function MapLegend(props: MapLegendProps) {
+  const { metric, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls, winners, hexes = null } = props;
+  // Hexagons always show listed claims, with their own classes.
+  const { breaks, min, max } = hexes ?? props;
   const mode = useMode();
   const ramp = metric === 'income' ? ramps.income[mode] : ramps.claims[mode];
   const labels = classLabels(breaks, min, max, metric === 'claims', (v) => fmt(metric, v), metric === 'claims');
@@ -61,9 +67,10 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
 
   return (
     <Card className="w-[260px] p-4">
-      <p className="text-sm font-semibold text-primary">{TITLES[metric]}</p>
+      <p className="text-sm font-semibold text-primary">{hexes ? `${LABELS.listedClaims} per hexagon` : TITLES[metric]}</p>
       <p className="mb-2.5 text-xs text-tertiary tabular">
-        {metric === 'claims' && breaks.join() === '0,1,3,9' ? 'Fixed classes' : 'Quantile classes'} · {fmtInt(tractCount)} tracts
+        {metric === 'claims' && breaks.join() === '0,1,3,9' ? 'Fixed classes' : 'Quantile classes'} ·{' '}
+        {hexes ? `${fmtInt(hexes.inRadius)} hexagons, ${hexSizeLabel(hexes.res)}` : `${fmtInt(tractCount)} tracts`}
       </p>
       <ul className="flex flex-col gap-1.5">
         {classes.map((color, i) => (
@@ -72,7 +79,12 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
             <span className="text-sm text-secondary tabular">{labels[i]}</span>
           </li>
         ))}
-        <li className="flex items-center gap-2">
+        {hexes ? (
+          <li className="flex items-center gap-2">
+            <Key><span className="h-3 w-full rounded-sm" style={{ border: `1px solid ${chrome[mode].grid}` }} /></Key>
+            <span className="text-sm text-secondary">Blank: no licensed stores</span>
+          </li>
+        ) : <li className="flex items-center gap-2">
           <Key>
             <span
               className="h-3 w-full rounded-sm"
@@ -86,7 +98,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
             {metric === 'perRetailer' ? 'No data or no retailers' : LABELS.noData}
             <span className="text-xs text-tertiary tabular"> · {fmtInt(noDataCount)}</span>
           </span>
-        </li>
+        </li>}
       </ul>
       {bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} controls={storeControls} />}
       {winners && <WinnersKey {...winners} />}
@@ -97,7 +109,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
             {coverage.statewide ? 'Coverage: statewide' : 'Coverage boundary'} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
           </span>
         </div>
-        {metric !== 'income' && lowMatchCount > 0 && (
+        {!hexes && metric !== 'income' && lowMatchCount > 0 && (
           <div className="flex items-center gap-2">
             <Key><span className="h-3 w-full rounded-sm" style={{ border: `2px dashed ${status.warning}` }} /></Key>
             <AlertTriangle className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden />
@@ -111,6 +123,7 @@ export function MapLegend({ metric, breaks, min, max, tractCount, noDataCount, c
         <p className="mt-1 text-xs leading-[1.45] text-tertiary">
           {metric === 'income' ? CAVEATS.ecological : metric === 'perRetailer' ? CAVEATS.perRetailer : CAVEATS.listedOnly}
           {metric !== 'income' && <> {CAVEATS.matchedOnly}</>}
+          {hexes && <> {CAVEATS.hexes}</>}
         </p>
       </div>
     </Card>

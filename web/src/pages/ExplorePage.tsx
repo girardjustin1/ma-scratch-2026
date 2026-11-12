@@ -17,12 +17,13 @@ import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../c
 import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
 import { Playback, WINDOW_DAYS, type PlayMode } from '../components/Playback';
-import { StoreCard, TractCard, type PanelTab, type StoreTrend, type TrendWindow } from '../components/SelectionCard';
+import { HexCard, StoreCard, TractCard, type PanelTab, type StoreTrend, type TrendWindow } from '../components/SelectionCard';
 import { PlaceDetails } from '../components/PlaceDetails';
 import { addDays, daysBetween, fmtDate, fmtInt } from '../lib/format';
 import { LABELS } from '../lib/copy';
 import { groupWinners, type WinnerGrouping, type WinnerRow } from '../domain/winners';
 import type { WinnersKeyProps } from '../components/WinnersKey';
+import { buildHexLayer, hexResForZoom, hexSizeLabel, storeCells, type AreaShape } from '../domain/hexes';
 
 export interface ExploreData {
   tracts: TractCollection;
@@ -47,6 +48,8 @@ export interface ExplorePageProps {
   initialSelected?: string;
   online?: boolean;
   initialBasemap?: Basemap;
+  /** Start with the map filled by hexagons instead of tracts. */
+  initialArea?: AreaShape;
 }
 
 /** First index with ds[i] > d (ds sorted ascending ISO dates). */
@@ -116,9 +119,12 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
 
 export function ExplorePage({
   data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
+  initialArea = 'tracts',
 }: ExplorePageProps) {
   const [filters, setFilters] = useState(initialFilters);
-  const [metric, setMetric] = useState<MetricKey>(initialMetric);
+  const [metric, setMetric] = useState<MetricKey>(initialArea === 'hexes' ? 'claims' : initialMetric);
+  // The metric to restore when hexagons (claims only) are switched back to tracts.
+  const [metricBeforeHexes, setMetricBeforeHexes] = useState<MetricKey>(initialMetric);
   const [metricB, setMetricB] = useState<MetricKey>(initialMetric === 'income' ? 'claims' : 'income');
   const [compare, setCompare] = useState(initialCompare);
   const [selection, setSelection] = useState<MapSelection>(() => {
@@ -129,7 +135,7 @@ export function ExplorePage({
   const [hiddenClasses, setHiddenClasses] = useState<Set<number>>(new Set());
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected ? 'claims' : null);
-  const [layers, setLayers] = useState({ tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
+  const [layers, setLayers] = useState({ areaShape: initialArea, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
   const [view, setView] = useState<Partial<ViewState>>({
     longitude: data.coverage.center[0], latitude: data.coverage.center[1], zoom: 10.4,
   });
@@ -140,6 +146,16 @@ export function ExplorePage({
   const [playMode, setPlayMode] = useState<PlayMode>('grow');
   const a = useLayer(data, filters, metric);
   const b = useLayer(data, filters, metricB);
+  // Hexagons: size follows the zoom; counts follow the same filters as the store bubbles.
+  const hexRes = hexResForZoom(view.zoom ?? 10.4);
+  const cells = useMemo(() => storeCells(data.retailers, hexRes), [data.retailers, hexRes]);
+  const coveredTracts = useMemo(() => new Set(a.metrics.filter((m) => m.covered).map((m) => m.geoid)), [a.metrics]);
+  const hexes = useMemo(
+    () => (layers.areaShape === 'hexes'
+      ? buildHexLayer({ res: hexRes, cells, retailers: data.retailers, claims: a.claims, coveredTracts, filters })
+      : null),
+    [layers.areaShape, hexRes, cells, data.retailers, a.claims, coveredTracts, filters],
+  );
   // Each store's listed dates, sorted, indexed once when playback starts; every frame then
   // counts by binary search instead of refiltering every claim.
   const playing = playDate !== null;
@@ -194,9 +210,13 @@ export function ExplorePage({
   const selTract = data.tracts.features.find((f) => f.properties.geoid === selGeoid)?.properties;
   const selMetrics = a.metrics.find((m) => m.geoid === selGeoid);
   const tractStores = selection?.kind === 'tract' ? data.retailers.filter((r) => r.tractGeoid === selection.geoid) : [];
+  // A selected hexagon only matches while the zoom keeps the same hexagon size.
+  const hexStores = selection?.kind === 'hex'
+    ? data.retailers.filter((r) => cells.get(r.id) === selection.cell && coveredTracts.has(r.tractGeoid)) : [];
+  const areaStores = selection?.kind === 'hex' ? hexStores : tractStores;
   const selClaims = selStore
     ? a.claims.filter((c) => c.retailerId === selStore.id)
-    : (() => { const ids = new Set(tractStores.map((r) => r.id)); return a.claims.filter((c) => ids.has(c.retailerId)); })();
+    : (() => { const ids = new Set(areaStores.map((r) => r.id)); return a.claims.filter((c) => ids.has(c.retailerId)); })();
   const clear = () => { setSelection(null); setPanelTab(null); };
 
   // Stores in the current view (respecting the claims-per-store slider), busiest first.
@@ -226,6 +246,13 @@ export function ExplorePage({
         lngLat: [selStore.lon, selStore.lat] as [number, number],
         node: <StoreCard store={selStore} claims={selClaims} games={data.games} anchor={anchor} trend={trend.get(selStore.id)} trendWindow={trendWindow}
           onOpen={setPanelTab} onZoom={() => zoomTo([selStore.lon, selStore.lat], 16)} onClose={clear} />,
+      };
+    }
+    if (selection.kind === 'hex' && hexStores.length) {
+      return {
+        lngLat: selection.lngLat,
+        node: <HexCard sizeLabel={hexSizeLabel(hexRes, false)} stores={hexStores} claims={selClaims} games={data.games} anchor={anchor}
+          onZoom={() => zoomTo(selection.lngLat, hexRes === 6 ? 10.6 : hexRes === 7 ? 12.6 : 14.5)} onClose={clear} />,
       };
     }
     if (selection.kind === 'tract' && selTract && selMetrics) {
@@ -283,6 +310,13 @@ export function ExplorePage({
     onSelectStore: selectStore,
     onClearSelection: clear,
   };
+  // Hexagons map listed claims only: switch the metric to claims, and restore it on the way back.
+  const setArea = (areaShape: AreaShape) => {
+    if (areaShape === layers.areaShape) return;
+    if (areaShape === 'hexes') { setMetricBeforeHexes(metric); setMetric('claims'); } else setMetric(metricBeforeHexes);
+    if (selection?.kind === 'tract' || selection?.kind === 'hex') clear();
+    setLayers({ ...layers, areaShape });
+  };
 
   // Controls sit top-left, the legend bottom-right; each scrolls on its own so neither is
   // clipped or overlaps the other on short windows.
@@ -293,7 +327,7 @@ export function ExplorePage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-col gap-3 border-b border-secondary bg-primary px-6 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <MetricSwitcher value={metric} onChange={setMetric} />
+          <MetricSwitcher value={metric} onChange={setMetric} claimsOnly={layers.areaShape === 'hexes'} />
           <Button size="sm" color={compare ? 'primary' : 'secondary'} iconLeading={Columns03} onClick={() => setCompare(!compare)}
             aria-pressed={compare}>
             Side by side
@@ -314,23 +348,25 @@ export function ExplorePage({
         <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={storeCounts} playing={playing}
             storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
-            viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds} />
+            viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds}
+            hexes={hexes} onSelectHex={(cell, lngLat) => { setSelection({ kind: 'hex', cell, lngLat }); setPanelTab(null); }} />
           <div className="absolute bottom-7 left-3 z-10">
             <Playback from={filters.dateFrom} to={filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo}
               value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
           </div>
           {!compare && (
             <div className={controlsBox}>
-              <LayerControls {...layers} online={online} onChange={(p) => setLayers({ ...layers, ...p })} />
+              <LayerControls {...layers} online={online}
+                onChange={({ areaShape, ...p }) => (areaShape ? setArea(areaShape) : setLayers({ ...layers, ...p }))} />
             </div>
           )}
           <div className={legendBox}>
             <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
               bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined}
-              winners={winners} />
+              winners={winners} hexes={hexes} />
           </div>
           <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
-            Click a store or tract for recent claims and actions · double-click to move the pin
+            Click a store or {layers.areaShape === 'hexes' ? 'hexagon' : 'tract'} for recent claims and actions · double-click to move the pin
           </p>
         </div>
         {compare && (
