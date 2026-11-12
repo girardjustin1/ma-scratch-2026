@@ -18,3 +18,36 @@ Optional: put a Mapbox public token in `web/.env.local` as `VITE_MAPBOX_TOKEN=..
 the online streets basemap. Without it the map runs on bundled outlines, fully offline.
 
 Data files live in `data/` and are never committed. See `docs/research/` for sources.
+
+## Daily data job
+
+`scripts/update_data.py` refreshes the local data. It is safe to run more than once a day.
+
+1. **Winners list:** fetches every listed day that is missing, through yesterday (New York
+   time). One request per day. A day the Lottery has not posted yet is asked for again on the
+   next run.
+2. **Game catalog and prize tables:** fetched at most once a day.
+3. **Retailers:** a new statewide sweep runs only when the last one is more than 30 days old,
+   because it takes about 175 requests. New or changed addresses are not geocoded
+   automatically, so they stay off the map until you run the job by hand with
+   `--geocode-new`.
+4. **Rebuild:** when any input changed, it rebuilds `data/processed/`,
+   `web/public/local/view.json` and `pace.json`.
+5. **Reports:** runs `npm --prefix web run reports:publish`.
+
+It only contacts `www.masslottery.com`, waits at least 1.3 s between requests and retries
+with backoff. It never overwrites a raw file, and a lock file stops two runs from
+overlapping. Everything it writes is gitignored.
+
+- **Schedule:** daily at 07:15 local time, run by launchd
+  (`com.girardjustin.ma-scratch.update`). Install or reinstall with
+  `sh scripts/install_update_job.sh`. The template is in `scripts/launchd/`.
+- **Logs:** `data/logs/update.out.log` and `update.err.log`. launchd creates these files
+  itself, so never delete, rotate or recreate them from a shell. If you do, the job fails
+  with EX_CONFIG.
+- **Run by hand:**
+  `uv run --with duckdb --with pandas --with pyarrow --with numpy --with shapely python3 scripts/update_data.py`
+  (add `--rebuild` to force a rebuild, or `--no-publish` to skip reports). To run the
+  scheduled job right away: `launchctl kickstart -k gui/$(id -u)/com.girardjustin.ma-scratch.update`.
+- **Uninstall:** `launchctl bootout gui/$(id -u)/com.girardjustin.ma-scratch.update`, then
+  `rm ~/Library/LaunchAgents/com.girardjustin.ma-scratch.update.plist`.
