@@ -6,6 +6,8 @@ import { CaveatNote, CoverageChip, IncomeValue } from '../components/Basics';
 import { TractTooltip } from '../components/TractTooltip';
 import { MapLegend } from '../components/MapLegend';
 import { groupWinners } from '../domain/winners';
+import { gameRefsWithPace, samplePace, samplePaceData } from '../fixtures/samplePace';
+import { PrizeTierTable } from '../components/PrizeTierTable';
 import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
 import { GamePicker } from '../components/GamePicker';
 import { DetailPanel } from '../components/DetailDrawer';
@@ -116,7 +118,7 @@ export const GamePicker_: StoryObj<{ prices: number[] }> = {
   argTypes: { prices: { control: 'check', options: [1, 2, 5, 10, 20, 30, 50] } },
   render: (args) => {
     const [ids, setIds] = useState<string[]>([]);
-    return <GamePicker games={S.gameRefs} value={ids} onChange={setIds} prices={args.prices} claimCounts={sampleGameCounts} />;
+    return <GamePicker games={gameRefsWithPace} value={ids} onChange={setIds} prices={args.prices} claimCounts={sampleGameCounts} />;
   },
 };
 
@@ -224,5 +226,14 @@ export const Sources: Story = {
   render: () => {
     const [on, setOn] = useState(false);
     return <SourcesPanel sources={S.sources} online={on} onToggleOnline={setOn} />;
+  },
+};
+
+/** Prizes-left panel with the pace block (synthetic curves). */
+export const PrizesLeftWithPace: Story = {
+  name: 'Prizes left · with pace',
+  render: () => {
+    const g = S.games.find((x) => x.status === 'open')!;
+    return <PrizeTierTable game={g} tiers={S.prizeTiers} asOf={S.AS_OF} pace={samplePace.get(g.id)} paceData={samplePaceData} />;
   },
 };

@@ -3,6 +3,7 @@ import * as S from '../fixtures/sample';
 import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
+import { samplePace, samplePaceData } from '../fixtures/samplePace';
 import type { MetricKey } from '../domain/types';
 
 const meta: Meta = { title: 'Pages', parameters: { layout: 'fullscreen' } };
@@ -30,7 +31,8 @@ export const MapWideRadius: StoryObj = {
 };
 
 export const Games: StoryObj = {
-  render: () => <Frame><GamesPage games={S.games} tiers={S.prizeTiers} claims={S.claims} coverage={S.coverage} asOf={S.AS_OF} /></Frame>,
+  render: () => <Frame><GamesPage games={S.games} tiers={S.prizeTiers} claims={S.claims} coverage={S.coverage} asOf={S.AS_OF}
+    pace={{ games: samplePace, data: samplePaceData }} /></Frame>,
 };
 export const EV: StoryObj = { render: () => <Frame><EvPage games={S.games} tiers={S.prizeTiers} legacy={S.legacyEv} asOf={S.AS_OF} /></Frame> };
 export const Statistics: StoryObj = { render: () => <Frame><StatsPage stats={S.statResults} schedule={{ claims: S.claims, source: 'sample data' }} /></Frame> };
