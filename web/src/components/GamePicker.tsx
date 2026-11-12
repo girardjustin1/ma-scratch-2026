@@ -15,6 +15,7 @@ import { Toggle } from '@/components/base/toggle/toggle';
 import { cx } from '@/utils/cx';
 import type { GameRef, PrizeBand } from '../domain/types';
 import { BUCKETS, bucketForBand, type BucketId } from '../domain/prizeBuckets';
+import { PaceBadge } from './GamePace';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
 import { CaveatNote } from './Basics';
@@ -264,7 +265,10 @@ function GameRow({ g, claims, sort, bucket }: { g: GameRef; claims: number; sort
               <AriaText slot="label" className="truncate text-sm font-medium text-primary">{g.name}</AriaText>
               {g.onSale === false && <Badge type="modern" size="sm" color="gray">Not on sale</Badge>}
             </div>
-            <AriaText slot="description" className="block truncate text-xs text-tertiary">{meta}</AriaText>
+            <div className="flex items-center gap-1.5">
+              <AriaText slot="description" className="block min-w-0 truncate text-xs text-tertiary">{meta}</AriaText>
+              <span className="shrink-0"><PaceBadge entry={g.pace?.buckets[bucket]} /></span>
+            </div>
           </div>
           {sort === 'payback'
             ? <Metric value={g.ev ? `${Math.round(g.ev.payback * 100)}%` : '—'}
@@ -307,7 +311,8 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
   const [groupByPrice, setGroupByPrice] = useState(true);
   // Which prize bucket the "left" column shows; follows the Prize size filter until changed here.
   const [bucketPick, setBucketPick] = useState<BucketId | null>(null);
-  const bucket = bucketPick ?? bucketForBand(prizeBand);
+  // With every prize size shown, start on $10,000 – $99,999: enough prizes per game for pace.
+  const bucket = bucketPick ?? (prizeBand === 'all' ? 'b10k' : bucketForBand(prizeBand));
   // Price chips are the map's ticket-price filter (they change the map); every other chip
   // only narrows this list. The local state holds the non-price chips.
   const [localSel, setLocalSel] = useState<FacetSelection>({});

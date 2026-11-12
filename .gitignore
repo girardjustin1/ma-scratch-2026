@@ -1,5 +1,5 @@
 # Data never goes to the public repo
-data/
+/data/
 *.parquet
 *.duckdb
 *.duckdb.wal

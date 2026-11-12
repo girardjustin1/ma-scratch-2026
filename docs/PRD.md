@@ -92,7 +92,12 @@ vintages, not a year-over-year change. Tract boundary vintage must match the inc
    reruns, leave-one-town-out), income redraw from MOE. "Associated with", never "causes".
 6. **Exploratory ML**: tract-week counts, place features only, time-ordered and
    town-grouped validation, baselines, regularized Poisson + GBT. Gate: 26+ weeks, 200+
-   covered tracts, 2,000+ claims.
+   covered tracts, 2,000+ claims. Hex study (2026-11-11, `docs/hex-study.md`): an H3 weekly
+   backtest found nothing that forecasts next week's listed claims better than each area's
+   past-year rate; no forecast layer ships. Owner decision 2026-11-11: build **game pace**
+   instead (`scripts/game_pace.py`): share of each prize size claimed by week since launch vs
+   same-price games at the same age, shown in the prizes-left panel and as a picker badge.
+   Statewide and descriptive; never per store.
 7. **Refresh/caching/exports**: user-triggered per-source refresh, validated snapshots,
    offline switch (starts offline), CSV/GeoJSON/PNG exports carrying filters + caveats.
 
