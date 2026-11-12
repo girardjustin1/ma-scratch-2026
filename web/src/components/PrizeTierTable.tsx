@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useUrlState } from '../app/route';
 import { Table } from '@/components/application/table/table';
 import { Badge } from '@/components/base/badges/badges';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
@@ -38,8 +38,8 @@ export function PrizeTierTable({ game, tiers, asOf, image, pace, paceData }: {
   /** This game's pace and the typical ranges (local data only); no pace block without them. */
   pace?: GamePace | null; paceData?: PaceData;
 }) {
-  const [view, setView] = useState<'tiers' | 'buckets'>('buckets');
-  const [paceBucket, setPaceBucket] = useState<BucketId>('b10k');
+  const [view, setView] = useUrlState<'tiers' | 'buckets'>('prizes', 'buckets', ['tiers', 'buckets']);
+  const [paceBucket, setPaceBucket] = useUrlState<BucketId>('pace', 'b10k', BUCKETS.map((b) => b.id));
   const mine = tiers.filter((t) => t.gameId === game.id).sort((a, b) => b.value - a.value);
   const counts = bucketCounts(mine);
   const buckets = BUCKETS.filter((b) => counts[b.id].total > 0);

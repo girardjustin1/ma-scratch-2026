@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useUrlState } from '../app/route';
 import type { Claim, Coverage, Game, LegacyEv, PrizeTier, StatResult } from '../domain/types';
 import type { GamePace, PaceData } from '../domain/pace';
 import { buildGameRows, buildPrizeRows, OpenGamesTable } from '../components/OpenGamesTable';
@@ -27,7 +28,8 @@ export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap, i
 }) {
   const rows = useMemo(() => buildGameRows(games, tiers, claims), [games, tiers, claims]);
   const prizeRows = useMemo(() => buildPrizeRows(games, tiers, claims), [games, tiers, claims]);
-  const [sel, setSel] = useState(rows.slice().sort((a, b) => b.largestUnclaimed - a.largestUnclaimed)[0]?.game.id);
+  const top = rows.slice().sort((a, b) => b.largestUnclaimed - a.largestUnclaimed)[0]?.game.id ?? '';
+  const [sel, setSel] = useUrlState('game', top, rows.map((r) => r.game.id));
   const game = games.find((g) => g.id === sel);
   const from = addDays(asOf, -182);
   return (
@@ -38,7 +40,7 @@ export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap, i
       {game && (
         <Card className="p-4">
           <h2 className="text-lg font-semibold text-primary">{game.name}: listed claims, last six months</h2>
-          <p className="text-xs text-tertiary">Dot size by prize. Grey bands are periods with no claims coverage, not periods without claims.</p>
+          <p className="text-xs text-tertiary">Every listed claim counts in the weekly bars; prizes of $10,000 and up also get a dot, sized by prize. Grey bands are periods with no claims coverage, not periods without claims.</p>
           <WinnerTimeline claims={claims.filter((c) => c.gameId === game.id)} from={from} to={asOf} covered={[{ from: coverage.dateFrom, to: coverage.dateTo }]} width={1180} />
           <CaveatNote>{CAVEATS.listedOnly} {CAVEATS.listedDate}</CaveatNote>
         </Card>

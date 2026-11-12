@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useMemo, type ReactElement } from 'react';
+import { useUrlState } from '../app/route';
 import { Mail01 } from '@untitledui/icons';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
 import { cx } from '@/utils/cx';
@@ -29,8 +30,10 @@ const REAL_NOTE = 'Real data, on this computer only. Not sent.';
  * with the real ticket art served by the dev server. Nothing is sent and nothing is saved.
  */
 export function EmailsPage({ data }: { data: ExploreData | null }) {
-  const [key, setKey] = useState<EmailKey>('weekly');
-  const [radius, setRadius] = useState<AlertRadius>(1);
+  const [key, setKey] = useUrlState<EmailKey>('email', 'weekly', EMAILS.map((e) => e.key));
+  const [radiusText, setRadiusText] = useUrlState('radius', '1', ['1', '2', '3']);
+  const radius = Number(radiusText) as AlertRadius;
+  const setRadius = (r: AlertRadius) => setRadiusText(String(r) as '1');
   const email = useMemo(() => (data ? buildEmail(data, key, radius) : null), [data, key, radius]);
 
   if (!data) {
