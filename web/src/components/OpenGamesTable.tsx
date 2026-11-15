@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useUrlState } from '../app/route';
 import type { SortDescriptor } from 'react-aria-components';
 import { Table, TableCard } from '@/components/application/table/table';
 import { Badge } from '@/components/base/badges/badges';
@@ -97,7 +98,7 @@ function GameCell({ game }: { game: Game }) {
 }
 
 export function OpenGamesTable({ rows, prizeRows = [], asOf, selectedId, onSelect, limit = 100, initialView = 'open' }: OpenGamesTableProps) {
-  const [view, setView] = useState<GamesView>(initialView);
+  const [view, setView] = useUrlState<GamesView>('view', initialView, ['open', 'prizes', 'withClaimsOnly']);
   const [sort, setSort] = useState<SortKey>('largestUnclaimed');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
 

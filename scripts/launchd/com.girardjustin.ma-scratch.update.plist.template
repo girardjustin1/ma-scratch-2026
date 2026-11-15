@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Daily local data refresh for ma-scratch-2026. Rendered and loaded by
+     scripts/install_update_job.sh, which fills in __REPO__, __UV__, __PATH__ and __HOME__. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.girardjustin.ma-scratch.update</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__UV__</string>
+		<string>run</string>
+		<string>--with</string>
+		<string>duckdb</string>
+		<string>--with</string>
+		<string>pandas</string>
+		<string>--with</string>
+		<string>pyarrow</string>
+		<string>--with</string>
+		<string>numpy</string>
+		<string>--with</string>
+		<string>shapely</string>
+		<string>python3</string>
+		<string>scripts/update_data.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__REPO__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>__PATH__</string>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>7</integer>
+		<key>Minute</key>
+		<integer>15</integer>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>__REPO__/data/logs/update.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>__REPO__/data/logs/update.err.log</string>
+</dict>
+</plist>

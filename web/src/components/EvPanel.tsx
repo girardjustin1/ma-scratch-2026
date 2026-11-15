@@ -3,7 +3,7 @@ import { Table, TableCard } from '@/components/application/table/table';
 import { BadgeWithIcon } from '@/components/base/badges/badges';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
-import { useState } from 'react';
+import { useUrlState } from '../app/route';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { estimateEv } from '../domain/ev';
@@ -40,8 +40,10 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /** Statewide EV. Deliberately takes no map filters as props. */
 export function EvPanel({ games, tiers, legacy, asOf }: EvPanelProps) {
-  const [sort, setSort] = useState<EvSort>('payback');
-  const [positiveOnly, setPositiveOnly] = useState(false);
+  const [sort, setSort] = useUrlState<EvSort>('sort', 'payback', ['price', 'payback', 'paybackEx']);
+  const [positive, setPositive] = useUrlState('positive', '0', ['0', '1']);
+  const positiveOnly = positive === '1';
+  const setPositiveOnly = (v: boolean) => setPositive(v ? '1' : '0');
   const legacyBy = new Map(legacy.map((l) => [l.gameId, l]));
   const all = games.map((g) => ({ g, ev: estimateEv(g, tiers), legacy: legacyBy.get(g.id) }));
   const positives = all.filter((r) => r.ev?.checkInputs).length;

@@ -4,12 +4,12 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 
 type View = 'desktop' | 'mobile' | 'text';
 
-const SAMPLE_EMAIL_NOTE = 'Sample data. Rendered with React Email, exactly as Resend would send it.';
+const SAMPLE_EMAIL_NOTE = 'Sample data.';
 
 /**
- * Preview of an email (Storybook and the prototype's Emails tab): renders it to the HTML
- * that would be sent, shows it in a frame at desktop or phone width, and offers the
- * plain-text version. `note` says where the data comes from.
+ * A report, drawn with its design (React Email templates rendered to HTML in the browser),
+ * in a frame at desktop or phone width, with a plain-text view. Used by the Reports tab and
+ * Storybook. `note` says where the data comes from. Nothing is sent.
  */
 export function EmailPreview({ subject, email, note = SAMPLE_EMAIL_NOTE }: { subject: string; email: ReactElement; note?: string }) {
   const [view, setView] = useState<View>('desktop');

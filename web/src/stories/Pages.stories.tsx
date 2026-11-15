@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as S from '../fixtures/sample';
 import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
+import { ReportsPage } from '../pages/ReportsPage';
+import { loadSampleIssue, sampleReportIndex } from '../fixtures/sampleReports';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
 import { samplePace, samplePaceData } from '../fixtures/samplePace';
 import type { MetricKey } from '../domain/types';
@@ -49,4 +51,13 @@ export const Data: StoryObj = {
 export const FullPrototype: StoryObj = {
   name: 'Full prototype (all tabs)',
   render: () => <App />,
+};
+
+export const Reports: StoryObj = {
+  render: () => <Frame><ReportsPage index={sampleReportIndex} seen={new Set()} loadIssue={loadSampleIssue} /></Frame>,
+};
+
+export const ReportsEmpty: StoryObj = {
+  name: 'Reports · no archive yet',
+  render: () => <Frame><ReportsPage index={null} seen={new Set()} loadIssue={loadSampleIssue} /></Frame>,
 };

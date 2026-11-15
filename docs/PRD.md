@@ -98,8 +98,14 @@ vintages, not a year-over-year change. Tract boundary vintage must match the inc
    instead (`scripts/game_pace.py`): share of each prize size claimed by week since launch vs
    same-price games at the same age, shown in the prizes-left panel and as a picker badge.
    Statewide and descriptive; never per store.
-7. **Refresh/caching/exports**: user-triggered per-source refresh, validated snapshots,
-   offline switch (starts offline), CSV/GeoJSON/PNG exports carrying filters + caveats.
+7. **Refresh/caching/exports**: validated snapshots, offline switch (starts offline),
+   CSV/GeoJSON/PNG exports carrying filters + caveats. Owner decision 2026-11-12: a daily
+   background job on this Mac fetches newly posted claims (the Lottery posts each day's list
+   after the day ends; posted days never change) and prize tables, rebuilds the local view,
+   and publishes reports.
+8. **In-app reports** (2026-11-12): weekly insights (Mondays), monthly report (the 1st),
+   featured tickets and +EV watch (Mondays), nearby alert (daily when claims are listed within
+   1 mi), each with an archive in the Reports tab and in-app unread markers. Never emailed.
 
 ## Milestones
 
@@ -115,7 +121,8 @@ vintages, not a year-over-year change. Tract boundary vintage must match the inc
 - Income always with its MOE.
 - Every statistic has n, an interval and adjusted p, or an insufficient-sample message.
 - No ML output below the data gate.
-- No network request unless the user presses refresh or turns on the online basemap.
+- The app makes no network request unless the user turns on online mode (basemap, Places).
+  The only background fetch is the daily data job, to the Lottery's public endpoints.
 - Legacy EV file byte-identical after any refresh.
 - Tests cover coverage masking, EV math, export-matches-filter, leakage.
 

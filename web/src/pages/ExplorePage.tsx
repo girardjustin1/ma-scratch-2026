@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
@@ -23,6 +23,7 @@ import { addDays, daysBetween, fmtDate, fmtInt } from '../lib/format';
 import { LABELS } from '../lib/copy';
 import { groupWinners, type WinnerGrouping, type WinnerRow } from '../domain/winners';
 import type { WinnersKeyProps } from '../components/WinnersKey';
+import { readParam, useRouted, writeParams } from '../app/route';
 import { buildHexLayer, hexResForZoom, hexSizeLabel, storeCells, type AreaShape } from '../domain/hexes';
 
 export interface ExploreData {
@@ -50,6 +51,26 @@ export interface ExplorePageProps {
   initialBasemap?: Basemap;
   /** Start with the map filled by hexagons instead of tracts. */
   initialArea?: AreaShape;
+}
+
+const METRICS: MetricKey[] = ['claims', 'income', 'perRetailer'];
+const BANDS: Filters['prizeBand'][] = ['all', '600-999', '1k-9k', '10k-99k', '100k+'];
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const list = (v: string | null) => (v ? v.split(',').filter(Boolean) : null);
+
+/** Deep link → filters, falling back to the page's defaults for anything missing or invalid. */
+function filtersFromUrl(base: Filters): Filters {
+  const from = readParam('from'), to = readParam('to'), prize = readParam('prize'), radius = Number(readParam('radius'));
+  const prices = list(readParam('prices'))?.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  return {
+    ...base,
+    dateFrom: from && ISO.test(from) ? from : base.dateFrom,
+    dateTo: to && ISO.test(to) ? to : base.dateTo,
+    gameIds: list(readParam('games')) ?? base.gameIds,
+    prices: prices?.length ? prices : base.prices,
+    prizeBand: BANDS.includes(prize as Filters['prizeBand']) ? (prize as Filters['prizeBand']) : base.prizeBand,
+    radiusMiles: radius > 0 && radius <= 50 ? radius : base.radiusMiles,
+  };
 }
 
 /** First index with ds[i] > d (ds sorted ascending ISO dates). */
@@ -121,20 +142,29 @@ export function ExplorePage({
   data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
   initialArea = 'tracts',
 }: ExplorePageProps) {
-  const [filters, setFilters] = useState(initialFilters);
+  const routed = useRouted();
+  // Deep link (routed app only): the URL overrides the initial props.
+  const urlMetric = routed ? readParam('metric') as MetricKey | null : null;
+  if (routed && readParam('area') === 'hexes') initialArea = 'hexes';
+  if (urlMetric && METRICS.includes(urlMetric)) initialMetric = urlMetric;
+  if (routed && readParam('compare') === '1') initialCompare = true;
+  if (routed && readParam('tract')) initialSelected = readParam('tract')!;
+  const [filters, setFilters] = useState(() => (routed ? filtersFromUrl(initialFilters) : initialFilters));
   const [metric, setMetric] = useState<MetricKey>(initialArea === 'hexes' ? 'claims' : initialMetric);
   // The metric to restore when hexagons (claims only) are switched back to tracts.
   const [metricBeforeHexes, setMetricBeforeHexes] = useState<MetricKey>(initialMetric);
   const [metricB, setMetricB] = useState<MetricKey>(initialMetric === 'income' ? 'claims' : 'income');
   const [compare, setCompare] = useState(initialCompare);
   const [selection, setSelection] = useState<MapSelection>(() => {
+    const store = routed ? readParam('store') : null;
+    if (store && data.retailers.some((r) => r.id === store)) return { kind: 'store', id: store };
     const f = initialSelected ? data.tracts.features.find((t) => t.properties.geoid === initialSelected) : undefined;
     return f ? { kind: 'tract', geoid: f.properties.geoid, lngLat: f.properties.centroid } : null;
   });
   // Store key: classes switched off in the legend, and the map's visible bounds.
   const [hiddenClasses, setHiddenClasses] = useState<Set<number>>(new Set());
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
-  const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected ? 'claims' : null);
+  const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected && !routed ? 'claims' : null);
   const [layers, setLayers] = useState({ areaShape: initialArea, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
   const [view, setView] = useState<Partial<ViewState>>({
     longitude: data.coverage.center[0], latitude: data.coverage.center[1], zoom: 10.4,
@@ -297,6 +327,25 @@ export function ExplorePage({
           : { ...f, gameIds: toggle(f.gameIds, id) }),
   };
   const covered = a.metrics.filter((m) => m.inRadius && m.covered).length;
+
+  // Mirror the view to the URL, leaving defaults out.
+  useEffect(() => {
+    if (!routed) return;
+    const same = (x: unknown[], y: unknown[]) => x.join() === y.join();
+    writeParams({
+      metric: metric === 'income' && layers.areaShape === 'tracts' ? null : layers.areaShape === 'hexes' ? null : metric,
+      area: layers.areaShape === 'hexes' ? 'hexes' : null,
+      compare: compare ? '1' : null,
+      from: filters.dateFrom === initialFilters.dateFrom ? null : filters.dateFrom,
+      to: filters.dateTo === initialFilters.dateTo ? null : filters.dateTo,
+      games: same(filters.gameIds, initialFilters.gameIds) ? null : filters.gameIds.join(','),
+      prices: same(filters.prices, initialFilters.prices) ? null : filters.prices.join(','),
+      prize: filters.prizeBand === initialFilters.prizeBand ? null : filters.prizeBand,
+      radius: filters.radiusMiles === initialFilters.radiusMiles ? null : String(filters.radiusMiles),
+      store: selection?.kind === 'store' ? selection.id : null,
+      tract: selection?.kind === 'tract' ? selection.geoid : null,
+    });
+  }, [routed, metric, compare, layers.areaShape, filters, initialFilters, selection]);
 
   const mapProps = {
     tracts: data.tracts, retailers: data.retailers, coverage: data.coverage,

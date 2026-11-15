@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { ModeProvider } from '../theme/mode';
 import * as S from '../fixtures/sample';
 import { AppShell, type TabKey } from './AppShell';
+import { RoutingContext, TAB_PATHS, tabFromPath } from './route';
 import { ExplorePage } from '../pages/ExplorePage';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
-import { EmailsPage } from '../pages/EmailsPage';
+import { ReportsPage } from '../pages/ReportsPage';
+import { useReports } from '../reports/useReports';
 import type { ExploreData } from '../pages/ExplorePage';
 import type { Filters } from '../domain/types';
 import { loadLocalView } from '../data/localView';
@@ -24,21 +26,53 @@ function localFilters(d: ExploreData): Filters {
  * The prototype. The Map tab uses real data around the owner's pin when the gitignored
  * local view exists (useLocal); every other tab, and Storybook, use sample fixtures.
  */
-export function App({ initialTab = 'map', initialMode = 'light', useLocal = false }: { initialTab?: TabKey; initialMode?: 'light' | 'dark'; useLocal?: boolean }) {
+export function App({ initialTab = 'map', initialMode = 'light', useLocal = false, routed = false }: {
+  initialTab?: TabKey; initialMode?: 'light' | 'dark'; useLocal?: boolean;
+  /** Deep links: tab from the path, page state in the query string (app/route.ts). */
+  routed?: boolean;
+}) {
   const [local, setLocal] = useState<ExploreData | null>(null);
+  // With local data on, pages wait for it, so a deep link never opens on sample data first.
+  const [loaded, setLoaded] = useState(!useLocal);
   useEffect(() => {
-    if (useLocal) loadLocalView().then(setLocal);
+    if (useLocal) loadLocalView().then((d) => { setLocal(d); setLoaded(true); });
   }, [useLocal]);
-  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [tab, setTabState] = useState<TabKey>(() => {
+    if (!routed) return initialTab;
+    // Old /emails?email=… links open the same report type under /reports (before any page reads the URL).
+    if (window.location.pathname.replace(/\/+$/, '') === '/emails') {
+      const t = new URLSearchParams(window.location.search).get('email');
+      window.history.replaceState(null, '', `/reports${t ? `?type=${encodeURIComponent(t)}` : ''}`);
+    }
+    return tabFromPath(window.location.pathname) ?? initialTab;
+  });
+  const reports = useReports(useLocal);
+  // Back/forward: re-read the tab, and remount the page so it re-reads its query params.
+  const [nav, setNav] = useState(0);
+  useEffect(() => {
+    if (!routed) return;
+    const onPop = () => { setTabState(tabFromPath(window.location.pathname) ?? 'map'); setNav((n) => n + 1); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [routed]);
+  const setTab = (t: TabKey) => {
+    if (routed && t !== tab) window.history.pushState(null, '', TAB_PATHS[t]);
+    setTabState(t);
+  };
   const [mode, setMode] = useState<'light' | 'dark'>(initialMode);
   const [online, setOnline] = useState(false);
   const [mapGame, setMapGame] = useState<string | null>(null);
   const filters = local ? localFilters(local) : mapGame ? { ...S.defaultFilters, gameIds: [mapGame] } : S.defaultFilters;
 
   return (
+    <RoutingContext.Provider value={routed}>
     <ModeProvider mode={mode}>
       <AppShell tab={tab} onTab={setTab} online={online} mode={mode} onToggleMode={() => setMode(mode === 'dark' ? 'light' : 'dark')}
-        notice={local ? LOCAL_NOTICE : SAMPLE_NOTICE}>
+        notice={local ? LOCAL_NOTICE : SAMPLE_NOTICE} unreadReports={reports.unread}>
+        {/* Keyed so back/forward remounts the page and it re-reads its deep link. */}
+        <Fragment key={`${tab}-${nav}`}>
+        {!loaded && <p className="p-6 text-sm text-tertiary">Loading the local data…</p>}
+        {loaded && <>
         {tab === 'map' && (
           <ExplorePage key={local ? 'local' : (mapGame ?? 'all')} data={local ?? sampleExploreData} initialFilters={filters} online={online} />
         )}
@@ -57,8 +91,11 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         )}
         {tab === 'model' && <ModelPage gate={S.mlGate} />}
         {tab === 'data' && <DataPage sources={S.sources} online={online} onToggleOnline={setOnline} coverage={S.coverage} />}
-        {tab === 'emails' && <EmailsPage data={local} />}
+        {tab === 'reports' && <ReportsPage index={reports.index} seen={reports.seen} />}
+        </>}
+        </Fragment>
       </AppShell>
     </ModeProvider>
+    </RoutingContext.Provider>
   );
 }
