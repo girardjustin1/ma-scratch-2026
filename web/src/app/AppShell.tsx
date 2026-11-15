@@ -23,12 +23,14 @@ export interface AppShellProps {
   onToggleMode?: () => void;
   /** Banner stating which data is real and which is sample. */
   notice?: string;
+  /** The public GitHub Pages demo (sample data only). */
+  demo?: boolean;
   /** Unread published reports: a count on the Reports tab (in-app only, never a system notification). */
   unreadReports?: number;
   children: React.ReactNode;
 }
 
-export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, unreadReports = 0, children }: AppShellProps) {
+export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, unreadReports = 0, demo = false, children }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col bg-secondary">
       <header className="flex h-14 shrink-0 items-center gap-8 border-b border-secondary bg-primary px-6">
@@ -38,7 +40,7 @@ export function AppShell({ tab, onTab, online, mode, onToggleMode, notice, unrea
           </div>
           <div className="leading-tight">
             <p className="text-sm font-semibold text-primary">MA Scratch Claims</p>
-            <p className="text-xs text-tertiary">Descriptive explorer · local</p>
+            <p className="text-xs text-tertiary">Descriptive explorer · {demo ? 'public demo' : 'local'}</p>
           </div>
         </div>
         <Tabs selectedKey={tab} onSelectionChange={(k) => onTab(k as TabKey)} className="w-auto">

@@ -19,6 +19,19 @@ the online streets basemap. Without it the map runs on bundled outlines, fully o
 
 Data files live in `data/` and are never committed. See `docs/research/` for sources.
 
+## Public demo
+
+https://girardjustin1.github.io/ma-scratch-2026/ is the app on made-up sample data, with
+Storybook at `/storybook/`. It redeploys on every merge to `main`
+(`.github/workflows/pages.yml`). It never holds Lottery data: claims, games, stores and
+reports there are synthetic, the network toggle is off, and there is no Google place panel or
+Mapbox basemap. The real dashboard runs only locally.
+
+```bash
+cd web
+npm run build:pages   # demo build in web/dist-pages, then scripts/check-pages.mjs
+```
+
 ## Daily data job
 
 `scripts/update_data.py` refreshes the local data. It is safe to run more than once a day.

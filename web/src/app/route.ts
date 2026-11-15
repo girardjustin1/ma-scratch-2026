@@ -11,8 +11,14 @@ export const TAB_PATHS: Record<TabKey, string> = {
   map: '/', games: '/games', ev: '/ev', stats: '/stats', model: '/model', data: '/data', reports: '/reports',
 };
 
+/** The site root: '/' locally, '/ma-scratch-2026/' on the GitHub Pages demo (vite `base`). */
+const BASE = import.meta.env.BASE_URL.replace(/\/+$/, '');
+
+/** The address of a tab path (TAB_PATHS value or '/reports?…'), under the site root. */
+export const href = (path: string) => BASE + path;
+
 export function tabFromPath(path: string): TabKey | null {
-  const p = path.replace(/\/+$/, '') || '/';
+  const p = (path.startsWith(BASE) ? path.slice(BASE.length) : path).replace(/\/+$/, '') || '/';
   if (p === '/emails') return 'reports'; // old links; App rewrites the URL to /reports
   const hit = Object.entries(TAB_PATHS).find(([, v]) => v === p);
   return hit ? (hit[0] as TabKey) : null;
