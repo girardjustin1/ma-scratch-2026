@@ -30,6 +30,15 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   Charts are grey. Status is icon + words, never color.
 - Light/dark: `useMode()` from `web/src/theme/mode.tsx`; dark mode is `.dark-mode` on `<html>`.
 
+## Hexagon layer
+
+- Layers → Tracts | Hexagons. `web/src/domain/hexes.ts` sums the filtered listed claims of the
+  stores in each H3 cell (res 6/7/8 by zoom), in the browser, from the same claims as the bubbles.
+- Hexagons are listed claims only: picking them sets the metric to claims and disables the
+  census metrics; switching back restores the previous metric. Cells with no stores are blank.
+- Descriptive, never a forecast or "hot zone": the hex study (`docs/hex-study.md`) found nothing
+  beats past volume.
+
 ## Game pace
 
 - `scripts/game_pace.py` → gitignored `web/public/local/pace.json`; types in

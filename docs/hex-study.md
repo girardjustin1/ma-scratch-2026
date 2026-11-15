@@ -111,3 +111,10 @@ claim. An all-state grid at res 8 would be about 37k cells, mostly zero by const
 4. Retailer history: is there a dated retailer list, so the retailer-count feature does not
    leak?
 5. Should the study re-run after each data refresh, with results kept per run?
+
+## What shipped (2026-11-12)
+
+No forecast layer. The owner chose a descriptive **Hexagons** option for the map instead
+(Layers → Tracts | Hexagons): listed claims per H3 cell under the map's filters, sized by zoom
+(res 6 ≈ 14 sq mi, res 7 ≈ 2 sq mi, res 8 ≈ 0.3 sq mi). Computed in the browser; nothing new is
+written to disk.

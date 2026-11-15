@@ -16,6 +16,7 @@ import { Toggle } from '@/components/base/toggle/toggle';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
 import type { Filters, GameRef, MetricKey, PrizeBand } from '../domain/types';
+import type { AreaShape } from '../domain/hexes';
 import { CAVEATS, LABELS } from '../lib/copy';
 import { fmtDate, fmtRange } from '../lib/format';
 import { MAPBOX_TOKEN, type Basemap } from '../map/mapStyle';
@@ -25,7 +26,8 @@ import { GamePicker } from './GamePicker';
 /** Selected item reads darker than the rest: monochrome, no brand tint. */
 const SELECTED = 'selected:bg-tertiary selected:text-primary';
 
-export function MetricSwitcher({ value, onChange }: { value: MetricKey; onChange: (m: MetricKey) => void }) {
+/** claimsOnly: the hexagon layer is on, so only listed claims can be mapped. */
+export function MetricSwitcher({ value, onChange, claimsOnly = false }: { value: MetricKey; onChange: (m: MetricKey) => void; claimsOnly?: boolean }) {
   return (
     <ButtonGroup
       size="sm" aria-label="Map metric" disallowEmptySelection selectedKeys={[value]}
@@ -35,8 +37,8 @@ export function MetricSwitcher({ value, onChange }: { value: MetricKey; onChange
       }}
     >
       <ButtonGroupItem id="claims" className={SELECTED}>{LABELS.listedClaims}</ButtonGroupItem>
-      <ButtonGroupItem id="income" className={SELECTED}>{LABELS.medianIncome}</ButtonGroupItem>
-      <ButtonGroupItem id="perRetailer" className={SELECTED}>{LABELS.claimsPerRetailer}</ButtonGroupItem>
+      <ButtonGroupItem id="income" className={SELECTED} isDisabled={claimsOnly}>{LABELS.medianIncome}</ButtonGroupItem>
+      <ButtonGroupItem id="perRetailer" className={SELECTED} isDisabled={claimsOnly}>{LABELS.claimsPerRetailer}</ButtonGroupItem>
     </ButtonGroup>
   );
 }
@@ -254,6 +256,8 @@ export function FilterBar({ filters, games, minDate, maxDate, onChange, onReset,
 }
 
 export interface LayerControlsProps {
+  /** Fill the map by census tract or by hexagon (hexagons always show listed claims). */
+  areaShape: AreaShape;
   tractOpacity: number;
   bubbleOpacity: number;
   showBubbles: boolean;
@@ -279,12 +283,22 @@ function OpacityRow({ label, value, disabled, onChange }: { label: string; value
   );
 }
 
-export function LayerControls({ tractOpacity, bubbleOpacity, showBubbles, basemap, online, onChange }: LayerControlsProps) {
+export function LayerControls({ areaShape, tractOpacity, bubbleOpacity, showBubbles, basemap, online, onChange }: LayerControlsProps) {
   const canMapbox = online && !!MAPBOX_TOKEN;
   return (
     <Card className="flex w-[260px] flex-col gap-3 p-4">
       <p className="text-sm font-semibold text-primary">Layers</p>
-      <OpacityRow label="Tract fill" value={tractOpacity} onChange={(v) => onChange({ tractOpacity: v })} />
+      <div className="flex flex-col gap-1.5">
+        <ButtonGroup size="sm" aria-label="Map areas" disallowEmptySelection selectedKeys={[areaShape]}
+          onSelectionChange={(keys) => { const k = [...keys][0]; if (k) onChange({ areaShape: k as AreaShape }); }}>
+          <ButtonGroupItem id="tracts" className={SELECTED}>Tracts</ButtonGroupItem>
+          <ButtonGroupItem id="hexes" className={SELECTED}>Hexagons</ButtonGroupItem>
+        </ButtonGroup>
+        {areaShape === 'hexes' && (
+          <p className="text-xs text-tertiary">Hexagons count listed claims, so income and claims per retailer are off until you switch back to tracts.</p>
+        )}
+      </div>
+      <OpacityRow label={areaShape === 'hexes' ? 'Hexagon fill' : 'Tract fill'} value={tractOpacity} onChange={(v) => onChange({ tractOpacity: v })} />
       <Toggle size="sm" label="Retailer bubbles" isSelected={showBubbles} onChange={(v) => onChange({ showBubbles: v })} />
       <OpacityRow label="Bubble fill" value={bubbleOpacity} disabled={!showBubbles} onChange={(v) => onChange({ bubbleOpacity: v })} />
       <div className="border-t border-secondary pt-3">
