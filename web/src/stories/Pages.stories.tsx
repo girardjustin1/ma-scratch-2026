@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as S from '../fixtures/sample';
 import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
 import { ReportsPage } from '../pages/ReportsPage';
+import { SettingsPage } from '../pages/SettingsPage';
+import { sampleLookup, sampleSettings } from '../fixtures/sampleSettings';
+import type { LocalSettings } from '../settings/settings';
 import { loadSampleIssue, sampleReportIndex } from '../fixtures/sampleReports';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
 import { samplePace, samplePaceData } from '../fixtures/samplePace';
@@ -60,4 +64,26 @@ export const Reports: StoryObj = {
 export const ReportsEmpty: StoryObj = {
   name: 'Reports · no archive yet',
   render: () => <Frame><ReportsPage index={null} seen={new Set()} loadIssue={loadSampleIssue} /></Frame>,
+};
+
+/** Settings with saves kept in memory, so the story responds like the app. */
+function SettingsStory({ initial, online }: { initial: LocalSettings; online: boolean }) {
+  const [settings, setSettings] = useState(initial);
+  return (
+    <Frame><SettingsPage data={sampleExploreData} defaultCenter={S.coverage.center} settings={settings}
+      onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} online={online}
+      onGoOnline={() => {}} onOpenMap={() => {}} onOpenGames={() => {}} /></Frame>
+  );
+}
+
+export const Settings: StoryObj = { render: () => <SettingsStory initial={sampleSettings} online={false} /> };
+
+export const SettingsEmpty: StoryObj = {
+  name: 'Settings · no places yet',
+  render: () => <SettingsStory initial={{ places: [], activeId: null, radiusMiles: 5 }} online />,
+};
+
+export const SettingsDemo: StoryObj = {
+  name: 'Settings · public demo',
+  render: () => <Frame><SettingsPage data={sampleExploreData} defaultCenter={S.coverage.center} settings={null} online={false} demo /></Frame>,
 };

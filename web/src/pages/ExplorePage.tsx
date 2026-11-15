@@ -167,7 +167,9 @@ export function ExplorePage({
   const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected && !routed ? 'claims' : null);
   const [layers, setLayers] = useState({ areaShape: initialArea, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
   const [view, setView] = useState<Partial<ViewState>>({
-    longitude: data.coverage.center[0], latitude: data.coverage.center[1], zoom: 10.4,
+    // 10.4 frames the default 5 mi radius; each halving of the radius zooms in one step.
+    longitude: data.coverage.center[0], latitude: data.coverage.center[1],
+    zoom: Math.min(14, Math.max(8, 10.4 + Math.log2(5 / filters.radiusMiles))),
   });
 
   // Playback: the map shows listed claims up to playDate (Grow) or the 30 days to it, while

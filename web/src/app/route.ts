@@ -8,7 +8,7 @@ import type { TabKey } from './AppShell';
  * The search pin is never written to the URL.
  */
 export const TAB_PATHS: Record<TabKey, string> = {
-  map: '/', games: '/games', ev: '/ev', stats: '/stats', model: '/model', data: '/data', reports: '/reports',
+  map: '/', games: '/games', ev: '/ev', stats: '/stats', model: '/model', data: '/data', reports: '/reports', settings: '/settings',
 };
 
 /** The site root: '/' locally, '/ma-scratch-2026/' on the GitHub Pages demo (vite `base`). */

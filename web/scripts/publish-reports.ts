@@ -13,6 +13,7 @@ import { localViewFromFiles, type LocalViewFile } from '../src/data/localView';
 import type { PaceFile } from '../src/domain/pace';
 import { buildIssue, plannedIssues, NEARBY_RADIUS, type IssueFile, type IssueMeta, type ReportIndex } from '../src/reports/reports';
 import { issueSubject } from '../src/reports/render';
+import { activePlace, validSettings } from '../src/settings/settings';
 import { distance, point } from '@turf/turf';
 
 const LOCAL = resolve(dirname(fileURLToPath(import.meta.url)), '../public/local');
@@ -32,7 +33,13 @@ if (!existsSync(viewPath)) {
   process.exit(0);
 }
 const pacePath = join(LOCAL, 'pace.json');
-const data = localViewFromFiles(readJson<LocalViewFile>(viewPath), existsSync(pacePath) ? readJson<PaceFile>(pacePath) : null);
+const view = localViewFromFiles(readJson<LocalViewFile>(viewPath), existsSync(pacePath) ? readJson<PaceFile>(pacePath) : null);
+// New issues describe the active saved place (Settings tab), else the default pin. Published
+// issues are never rebuilt, so they keep the place they were built for.
+const settingsPath = join(LOCAL, 'settings.json');
+let place = null;
+try { place = existsSync(settingsPath) ? activePlace(validSettings(readJson<unknown>(settingsPath))) : null; } catch { place = null; }
+const data = place ? { ...view, coverage: { ...view.coverage, center: [place.lon, place.lat] as [number, number] } } : view;
 
 // Listed claims per day at stores within the nearby-alert radius of the pin.
 const pin = point(data.coverage.center);
@@ -73,7 +80,7 @@ if (published.length) {
   writeAtomic(indexPath, { updatedAt: now, issues } satisfies ReportIndex);
 }
 const by = published.reduce<Record<string, number>>((acc, m) => ({ ...acc, [m.type]: (acc[m.type] ?? 0) + 1 }), {});
-console.log(`reports: data through ${data.coverage.dateTo}; published ${published.length}`
+console.log(`reports: data through ${data.coverage.dateTo}${place ? ' (active saved place)' : ''}; published ${published.length}`
   + (published.length ? ` (${Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', ')})` : '')
   + `; ${index.issues.length + published.length} in archive${firstRun && published.length ? ' (first run: backfilled)' : ''}`);
 if (failed.length) {

@@ -17,6 +17,10 @@ npm run storybook   # design system on http://127.0.0.1:6020
 Optional: put a Mapbox public token in `web/.env.local` as `VITE_MAPBOX_TOKEN=...` to enable
 the online streets basemap. Without it the map runs on bundled outlines, fully offline.
 
+Your places: the **Settings** tab looks up an address (with `GOOGLE_MAPS_API_KEY` in
+`web/.env.local`), saves it on this computer, and makes the map, the radius and new reports
+center on it.
+
 Data files live in `data/` and are never committed. See `docs/research/` for sources.
 
 ## Public demo
