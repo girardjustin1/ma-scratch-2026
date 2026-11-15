@@ -44,7 +44,8 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         )}
         {tab === 'games' && (local?.ev
           ? <GamesPage games={local.ev.games} tiers={local.ev.tiers} claims={local.claims} coverage={local.coverage} asOf={local.ev.asOf}
-              images={new Map(local.games.map((g) => [g.id, g.image]))} />
+              images={new Map(local.games.map((g) => [g.id, g.image]))}
+              pace={local.pace ? { games: new Map(local.games.map((g) => [g.id, g.pace])), data: local.pace } : undefined} />
           : <GamesPage games={S.games} tiers={S.prizeTiers} claims={S.claims} coverage={S.coverage} asOf={S.AS_OF}
               onFilterMap={(id) => setMapGame(id)} />)}
         {tab === 'ev' && (local?.ev

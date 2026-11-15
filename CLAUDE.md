@@ -30,6 +30,16 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   Charts are grey. Status is icon + words, never color.
 - Light/dark: `useMode()` from `web/src/theme/mode.tsx`; dark mode is `.dark-mode` on `<html>`.
 
+## Game pace
+
+- `scripts/game_pace.py` → gitignored `web/public/local/pace.json`; types in
+  `web/src/domain/pace.ts`, UI in `web/src/components/GamePace.tsx`.
+- A listed claim counts toward a prize level only if its amount equals the level's value (or
+  65% of it for annuities taken as cash). Buckets are used only if listed claims match the
+  prize table's "paid" counts. Calls rank a game among same-price games at the same age.
+- Pace describes how fast prizes HAVE been claimed, statewide. Never per store, never "due".
+  Show the statewide-trend line with it: a market slowdown makes many games "behind".
+
 ## Insights emails
 
 - `web/src/emails/`: React Email templates for sending with Resend. Three so far: weekly

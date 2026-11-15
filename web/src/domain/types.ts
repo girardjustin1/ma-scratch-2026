@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+import type { GamePace } from './pace';
 
 export type IsoDate = string; // YYYY-MM-DD, a Lottery-listed date. Never a time.
 
@@ -66,6 +67,8 @@ export interface GameRef {
   ev?: GameEv | null;
   /** Prizes left / printed per prize bucket (domain/prizeBuckets.ts), statewide. */
   buckets?: Record<string, { left: number; total: number }> | null;
+  /** How fast each prize size has been claimed vs comparable games (domain/pace.ts). */
+  pace?: GamePace | null;
 }
 
 /** Statewide expected value per ticket, from the prize table (PRD §4). */

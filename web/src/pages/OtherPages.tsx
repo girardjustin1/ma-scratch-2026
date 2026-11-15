@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Claim, Coverage, Game, LegacyEv, PrizeTier, StatResult } from '../domain/types';
+import type { GamePace, PaceData } from '../domain/pace';
 import { buildGameRows, buildPrizeRows, OpenGamesTable } from '../components/OpenGamesTable';
 import { PrizeTierTable } from '../components/PrizeTierTable';
 import { WinnerTimeline } from '../components/WinnerTimeline';
@@ -17,10 +18,12 @@ const Page = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap, images }: {
+export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap, images, pace }: {
   games: Game[]; tiers: PrizeTier[]; claims: Claim[]; coverage: Coverage; asOf: string; onFilterMap?: (gameId: string) => void;
   /** Ticket art by game id (local data only). */
   images?: Map<string, string | null | undefined>;
+  /** Game pace by game id plus the typical ranges (local data only). */
+  pace?: { games: Map<string, GamePace | null | undefined>; data: PaceData };
 }) {
   const rows = useMemo(() => buildGameRows(games, tiers, claims), [games, tiers, claims]);
   const prizeRows = useMemo(() => buildPrizeRows(games, tiers, claims), [games, tiers, claims]);
@@ -30,7 +33,8 @@ export function GamesPage({ games, tiers, claims, coverage, asOf, onFilterMap, i
   return (
     <Page>
       <OpenGamesTable rows={rows} prizeRows={prizeRows} asOf={asOf} selectedId={sel} onSelect={(id) => { setSel(id); onFilterMap?.(id); }} />
-      {game && <PrizeTierTable game={game} tiers={tiers} asOf={asOf} image={images?.get(game.id)} />}
+      {game && <PrizeTierTable game={game} tiers={tiers} asOf={asOf} image={images?.get(game.id)}
+        pace={pace?.games.get(game.id)} paceData={pace?.data} />}
       {game && (
         <Card className="p-4">
           <h2 className="text-lg font-semibold text-primary">{game.name}: listed claims, last six months</h2>

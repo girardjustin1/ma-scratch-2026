@@ -5,6 +5,9 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 import { cx } from '@/utils/cx';
 import { BUCKETS, bucketCounts } from '../domain/prizeBuckets';
 import type { Game, PrizeTier } from '../domain/types';
+import type { GamePace, PaceData } from '../domain/pace';
+import type { BucketId } from '../domain/prizeBuckets';
+import { GamePaceBlock } from './GamePace';
 import { CAVEATS } from '../lib/copy';
 import { fmtDate, fmtInt, fmtUsd } from '../lib/format';
 import { Card, CaveatNote } from './Basics';
@@ -30,8 +33,13 @@ function LeftBar({ left, total }: { left: number; total: number }) {
  * Every prize level of one game, statewide: printed, paid out, and still left, plus a
  * summary by prize bucket. "Left" = not yet paid out (unsold, or sold but not cashed).
  */
-export function PrizeTierTable({ game, tiers, asOf, image }: { game: Game; tiers: PrizeTier[]; asOf: string; image?: string | null }) {
+export function PrizeTierTable({ game, tiers, asOf, image, pace, paceData }: {
+  game: Game; tiers: PrizeTier[]; asOf: string; image?: string | null;
+  /** This game's pace and the typical ranges (local data only); no pace block without them. */
+  pace?: GamePace | null; paceData?: PaceData;
+}) {
   const [view, setView] = useState<'tiers' | 'buckets'>('buckets');
+  const [paceBucket, setPaceBucket] = useState<BucketId>('b10k');
   const mine = tiers.filter((t) => t.gameId === game.id).sort((a, b) => b.value - a.value);
   const counts = bucketCounts(mine);
   const buckets = BUCKETS.filter((b) => counts[b.id].total > 0);
@@ -111,6 +119,7 @@ export function PrizeTierTable({ game, tiers, asOf, image }: { game: Game; tiers
           </div>
         )}
       </div>
+      {pace && paceData && <GamePaceBlock pace={pace} data={paceData} bucket={paceBucket} onBucket={setPaceBucket} />}
       <CaveatNote className="mt-3">
         “Left” means not yet paid out: on tickets still for sale, or sold but not yet cashed. {CAVEATS.unclaimedPrizes.split('. ').slice(-1)[0]}
       </CaveatNote>

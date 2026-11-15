@@ -10,6 +10,7 @@ import type {
 } from '../domain/types';
 import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
 import type { EvData } from '../data/localView';
+import type { PaceData } from '../domain/pace';
 import type { Basemap } from '../map/mapStyle';
 import { CoverageChip } from '../components/Basics';
 import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../components/Controls';
@@ -34,6 +35,8 @@ export interface ExploreData {
   townMatch?: Record<string, TownMatch>;
   /** Real statewide EV inputs for the EV tab; only present for real data. */
   ev?: EvData;
+  /** Typical-pace ranges and statewide context for game pace (domain/pace.ts); real data only. */
+  pace?: PaceData;
 }
 
 export interface ExplorePageProps {
