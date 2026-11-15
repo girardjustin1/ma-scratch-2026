@@ -78,7 +78,7 @@ export function ModelPage({ gate }: { gate: MlGate }) {
 }
 
 export function DataPage({ sources, online, onToggleOnline, coverage }: {
-  sources: readonly SourceRow[]; online: boolean; onToggleOnline: (v: boolean) => void; coverage: Coverage;
+  sources: readonly SourceRow[]; online: boolean; onToggleOnline?: (v: boolean) => void; coverage: Coverage;
 }) {
   return (
     <Page>

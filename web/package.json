@@ -9,7 +9,8 @@
     "typecheck": "tsc -b --noEmit",
     "reports:publish": "tsx scripts/publish-reports.ts",
     "storybook": "storybook dev -p 6020 --host 127.0.0.1 --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "build:pages": "rm -rf dist-pages && VITE_DEMO=1 BASE_PATH=${BASE_PATH:-/ma-scratch-2026/} vite build --outDir dist-pages && VITE_DEMO=1 storybook build -o dist-pages/storybook --quiet && cp dist-pages/index.html dist-pages/404.html && node scripts/check-pages.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

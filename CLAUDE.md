@@ -73,6 +73,10 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   Lottery's terms allow personal, non-commercial download only, with no redistribution.
 - Census data is public domain; `web/src/fixtures/census_sample.json` is built from it by
   `scripts/build_design_fixture.py`. Never put Lottery data in fixtures.
+- The GitHub Pages demo (`npm run build:pages`, `VITE_DEMO=1`) is sample data only. Its
+  build ignores `.env*` files and `web/public/` (vite.config.ts, .storybook/main.ts), and
+  `web/scripts/check-pages.mjs` fails it if local data or any `.env.local` value got in.
+  Never weaken that guard or feed real data to the demo.
 - Fetch politely: ≥1.2 s between Lottery requests, and only when the user asks.
 
 ## Commands

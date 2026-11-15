@@ -12,6 +12,7 @@
 # Node / Python
 node_modules/
 dist/
+dist-pages/
 storybook-static/
 .venv/
 __pycache__/

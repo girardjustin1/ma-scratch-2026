@@ -178,7 +178,12 @@ function googleProxy(apiKey: string): Plugin {
 export default defineConfig(({ mode }) => {
   // Third argument '' loads unprefixed variables too; only this one is read, server-side.
   const apiKey = (loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '').GOOGLE_MAPS_API_KEY ?? '').trim();
+  // The public GitHub Pages demo (npm run build:pages, VITE_DEMO=1) must hold sample data
+  // only, wherever it is built: no .env files (the owner's pin, the Mapbox token) and no
+  // public/ dir (public/local/ holds the Lottery data and the report archive).
+  const demo = process.env.VITE_DEMO === '1';
   return {
+    ...(demo ? { base: process.env.BASE_PATH || '/', envDir: false as const, publicDir: false as const } : {}),
     plugins: [react(), tailwindcss(), googleProxy(apiKey)],
     // "@/..." is Untitled UI's import root (src/uui), kept so its copied files stay unedited.
     resolve: { alias: { '@': fileURLToPath(new URL('./src/uui', import.meta.url)) } },

@@ -26,7 +26,8 @@ export function OnlineChip({ online }: { online: boolean }) {
 export function SourcesPanel({ sources, online, onToggleOnline, onRefresh }: {
   sources: readonly SourceRow[];
   online: boolean;
-  onToggleOnline: (v: boolean) => void;
+  /** Absent in the public demo: the network stays off. */
+  onToggleOnline?: (v: boolean) => void;
   onRefresh?: (id: string) => void;
 }) {
   return (
@@ -37,7 +38,8 @@ export function SourcesPanel({ sources, online, onToggleOnline, onRefresh }: {
         contentTrailing={
           <div className="flex items-center gap-3 md:self-center">
             <OnlineChip online={online} />
-            <Toggle size="sm" label="Allow network" isSelected={online} onChange={onToggleOnline} />
+            <Toggle size="sm" label="Allow network" isSelected={online} onChange={onToggleOnline} isDisabled={!onToggleOnline}
+              hint={onToggleOnline ? undefined : 'Off in the public demo'} />
           </div>
         }
       />
