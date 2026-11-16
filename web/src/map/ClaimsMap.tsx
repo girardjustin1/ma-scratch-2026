@@ -264,6 +264,8 @@ export function ClaimsMap(props: ClaimsMapProps) {
   // Must be referentially stable: a new style object makes MapLibre reload the whole style
   // (every layer) on each render, which flashes the map blank on hover.
   const mapStyle = useMemo(() => baseStyle(mode, basemap), [mode, basemap]);
+  // The radius ring and coverage edge sit on the basemap: white over imagery, ink otherwise.
+  const lineInk = basemap === 'satellite' ? '#ffffff' : c.ink;
 
   const onLoad = useCallback(
     (e: { target: MlMap }) => {
@@ -390,14 +392,14 @@ export function ClaimsMap(props: ClaimsMapProps) {
         )}
         {!coverage.statewide && (
           <Source id="coverage" type="geojson" data={coverageRing}>
-            <Layer id="coverage-line" type="line" paint={{ 'line-color': c.ink, 'line-width': 1.6, 'line-opacity': 0.85 }} />
+            <Layer id="coverage-line" type="line" paint={{ 'line-color': lineInk, 'line-width': 1.6, 'line-opacity': 0.85 }} />
           </Source>
         )}
         <Source id="radius" type="geojson" data={radiusRing}>
           <Layer
             id="radius-line"
             type="line"
-            paint={{ 'line-color': c.ink, 'line-width': 1.4, 'line-dasharray': [2, 2], 'line-opacity': 0.7 }}
+            paint={{ 'line-color': lineInk, 'line-width': basemap === 'outline' ? 1.4 : 2, 'line-dasharray': [2, 2], 'line-opacity': basemap === 'outline' ? 0.7 : 0.95 }}
           />
         </Source>
         {showBubbles && (

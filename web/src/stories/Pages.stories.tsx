@@ -23,7 +23,7 @@ export const MapPage: StoryObj<{ metric: MetricKey; online: boolean }> = {
   args: { metric: 'income', online: false },
   argTypes: { metric: { control: 'inline-radio', options: ['claims', 'income', 'perRetailer'] } },
   render: ({ metric, online }) => (
-    <Frame><ExplorePage key={metric + online} data={sampleExploreData} initialFilters={S.defaultFilters} initialMetric={metric} online={online} initialBasemap={online ? 'mapbox' : 'outline'} /></Frame>
+    <Frame><ExplorePage key={metric + online} data={sampleExploreData} initialFilters={S.defaultFilters} initialMetric={metric} online={online} initialBasemap={online ? 'streets' : 'outline'} /></Frame>
   ),
 };
 

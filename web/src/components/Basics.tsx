@@ -16,6 +16,17 @@ export function CaveatNote({ children, dense, className }: { children: React.Rea
   );
 }
 
+/** A small info icon; the explanation shows on hover or keyboard focus. Keeps panels short without dropping caveats. */
+export function Info({ text, label = 'More information' }: { text: React.ReactNode; label?: string }) {
+  return (
+    <Tooltip title={<span className="block max-w-[280px] text-left font-normal">{text}</span>}>
+      <TooltipTrigger aria-label={label} className="inline-flex shrink-0 cursor-help align-middle text-fg-quaternary outline-hidden hover:text-fg-secondary focus-visible:text-fg-secondary">
+        <InfoCircle className="size-3.5" aria-hidden />
+      </TooltipTrigger>
+    </Tooltip>
+  );
+}
+
 /** States the claims coverage area and listed-date window. */
 export function CoverageChip({ coverage }: { coverage: Coverage }) {
   return (

@@ -6,7 +6,7 @@ import { ButtonUtility } from '@/components/base/buttons/button-utility';
 import { CloseButton } from '@/components/base/buttons/close-button';
 import { Slider } from '@/components/base/slider/slider';
 import { addDays, fmtDate } from '../lib/format';
-import { Card } from './Basics';
+import { Card, Info } from './Basics';
 
 export type PlayMode = 'grow' | 'window';
 
@@ -39,7 +39,8 @@ export interface PlaybackProps {
  */
 export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackProps) {
   const list = useMemo(() => frames(from, to), [from, to]);
-  const [playing, setPlaying] = useState(false);
+  // Mounted mid-playback (the map panel's Play button sets the first frame): start playing.
+  const [playing, setPlaying] = useState(value !== null);
   const [speed, setSpeed] = useState<keyof typeof SPEEDS>('1');
   const idx = value ? Math.max(0, list.findIndex((d) => d >= value)) : list.length - 1;
 
@@ -76,7 +77,9 @@ export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackPr
           <p className="truncate text-sm font-semibold text-primary tabular">
             {mode === 'grow' ? `Through ${fmtDate(value)}` : `${fmtDate(windowFrom < from ? from : windowFrom)} – ${fmtDate(value)}`}
           </p>
-          <p className="text-xs text-tertiary tabular">Day {idx + 1} of {list.length} · listed dates</p>
+          <p className="flex items-center gap-1 text-xs text-tertiary tabular">Day {idx + 1} of {list.length} · listed dates
+            <Info label="About playback" text="Each store is its own bubble while playing. It appears at its first listed claim and grows with its running total; colors follow the legend’s classes. Area colors stay on the full range. Close to return." />
+          </p>
         </div>
         <CloseButton size="sm" slot={null} onPress={() => { setPlaying(false); onChange(null); }} />
       </div>
@@ -95,10 +98,6 @@ export function Playback({ from, to, value, onChange, mode, onMode }: PlaybackPr
           {Object.keys(SPEEDS).map((s) => <ButtonGroupItem key={s} id={s} className="selected:bg-tertiary selected:text-primary">{s}×</ButtonGroupItem>)}
         </ButtonGroup>
       </div>
-      <p className="mt-2 text-xs leading-[1.45] text-tertiary">
-        Each store is its own bubble while playing. It appears at its first listed claim and grows with its running
-        total; colors follow the legend’s classes. Tract colors stay on the full range. Close to return.
-      </p>
     </Card>
   );
 }
