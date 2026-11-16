@@ -16,16 +16,25 @@ export function CaveatNote({ children, dense, className }: { children: React.Rea
   );
 }
 
-/** States the claims coverage area and listed-date window. */
-const COVERAGE_TIP = 'Claims data exists only inside this area and date window. Everything else shows as no data.';
-
-/** The data's area and date window. `plain` is one line of small text, for tight rows. */
-export function CoverageChip({ coverage, plain = false }: { coverage: Coverage; plain?: boolean }) {
-  const text = <>Coverage: {coverage.label} · {fmtRange(coverage.dateFrom, coverage.dateTo)}</>;
+/** A small info icon; the explanation shows on hover or keyboard focus. Keeps panels short without dropping caveats. */
+export function Info({ text, label = 'More information' }: { text: React.ReactNode; label?: string }) {
   return (
-    <Tooltip title={COVERAGE_TIP}>
-      <TooltipTrigger className={plain ? 'cursor-default text-xs text-tertiary tabular' : 'cursor-default'}>
-        {plain ? text : <BadgeWithIcon type="modern" size="md" color="gray" iconLeading={Calendar}>{text}</BadgeWithIcon>}
+    <Tooltip title={<span className="block max-w-[280px] text-left font-normal">{text}</span>}>
+      <TooltipTrigger aria-label={label} className="inline-flex shrink-0 cursor-help align-middle text-fg-quaternary outline-hidden hover:text-fg-secondary focus-visible:text-fg-secondary">
+        <InfoCircle className="size-3.5" aria-hidden />
+      </TooltipTrigger>
+    </Tooltip>
+  );
+}
+
+/** States the claims coverage area and listed-date window. */
+export function CoverageChip({ coverage }: { coverage: Coverage }) {
+  return (
+    <Tooltip title="Claims data exists only inside this area and date window. Everything else shows as no data.">
+      <TooltipTrigger className="cursor-default">
+        <BadgeWithIcon type="modern" size="md" color="gray" iconLeading={Calendar}>
+          Coverage: {coverage.label} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
+        </BadgeWithIcon>
       </TooltipTrigger>
     </Tooltip>
   );

@@ -98,7 +98,8 @@ export const CalendarCell = ({ date, isHighlighted, showOutOfRangeDates = false,
                                 className={cx(
                                     "absolute bottom-1 left-1/2 size-1.25 -translate-x-1/2 rounded-full",
                                     markedAsSelected ? "bg-fg-white" : "bg-fg-brand-primary",
-                                    isDisabled && "opacity-50",
+                                    // App change: today's dot stays solid even when today cannot be picked.
+                                    isDisabled && !isTodayDate && "opacity-50",
                                 )}
                             />
                         )}

@@ -6,6 +6,7 @@ import { TOP_GAMES, type WinnerGrouping, type WinnerRow } from '../domain/winner
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtInt } from '../lib/format';
 import { TicketThumb } from './GamePicker';
+import { Info } from './Basics';
 
 export interface WinnersKeyProps {
   /** Rows per grouping, listed claims in the radius under every filter except that grouping's own. */
@@ -45,11 +46,15 @@ export function WinnersKey({ rows, active, onPick, defaultOpen = true }: Winners
 
   return (
     <div className="mt-3 border-t border-secondary pt-2">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-1 text-sm font-semibold text-primary outline-hidden">
-        Winners by ticket <span className="font-normal text-tertiary tabular">· {fmtInt(total)}</span>
-        <ChevronDown className={cx('ml-auto size-4 text-fg-quaternary transition-transform', open && 'rotate-180')} aria-hidden />
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+          className="flex flex-1 cursor-pointer items-center gap-1 text-sm font-semibold text-primary outline-hidden">
+          Winners by ticket <span className="font-normal text-tertiary tabular">· {fmtInt(total)}</span>
+          <ChevronDown className={cx('ml-auto size-4 text-fg-quaternary transition-transform', open && 'rotate-180')} aria-hidden />
+        </button>
+        <Info label="About winners by ticket" text={<>{NOTE[by]} In the radius, under your other filters. Click a row to filter the map; click it again to clear.
+          The number is listed claims; the amount under it is their prizes added up. {CAVEATS.volumeNotLuck}</>} />
+      </div>
       {open && (
         <div className="mt-2">
           <ButtonGroup size="sm" aria-label="Group winners by" className="flex w-full" disallowEmptySelection selectedKeys={[by]}
@@ -58,9 +63,6 @@ export function WinnersKey({ rows, active, onPick, defaultOpen = true }: Winners
               <ButtonGroupItem key={g.id} id={g.id} className="flex-1 justify-center selected:bg-tertiary selected:text-primary">{g.label}</ButtonGroupItem>
             ))}
           </ButtonGroup>
-          <p className="mt-1.5 text-[11px] leading-[1.4] text-tertiary">
-            {NOTE[by]} In the radius, under your other filters · click a row to filter the map{filtered ? '; click again to clear' : ''}.
-          </p>
           <ul className={cx('mt-1.5 flex flex-col', by === 'game' && 'max-h-72 overflow-y-auto')}>
             {shown.map((r) => {
               const on = active[by].includes(r.id);
@@ -103,9 +105,6 @@ export function WinnersKey({ rows, active, onPick, defaultOpen = true }: Winners
             )}
             {total === 0 && <li className="py-1 text-xs text-tertiary">No listed claims in the radius with these filters.</li>}
           </ul>
-          <p className="mt-1.5 text-[11px] leading-[1.4] text-tertiary">
-            Number = listed claims; amount below = their prizes added up. {CAVEATS.volumeNotLuck}
-          </p>
         </div>
       )}
     </div>

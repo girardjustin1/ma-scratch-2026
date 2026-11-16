@@ -8,7 +8,8 @@ import { MapLegend } from '../components/MapLegend';
 import { groupWinners } from '../domain/winners';
 import { gameRefsWithPace, samplePace, samplePaceData } from '../fixtures/samplePace';
 import { PrizeTierTable } from '../components/PrizeTierTable';
-import { FilterBar, LayerControls, MapToolbar, MetricSelect } from '../components/Controls';
+import { FilterBar, MetricSelect } from '../components/Controls';
+import { MapPanel } from '../components/MapPanel';
 import type { Basemap } from '../map/mapStyle';
 import { GamePicker } from '../components/GamePicker';
 import { DetailPanel } from '../components/DetailDrawer';
@@ -105,8 +106,8 @@ export const Filters_: Story = {
     const [f, setF] = useState<Filters>(S.defaultFilters);
     return (
       <FilterBar filters={f} defaults={S.defaultFilters} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
-        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)}
-        summary={<p className="text-xs text-tertiary">127 listed claims (over $600) in radius · 295 covered tracts · Coverage: 5 mi around sample pin</p>} />
+        claimCounts={sampleGameCounts} onChange={setF}
+        summary={<p className="text-sm text-secondary"><span className="font-semibold text-primary">127</span> listed claims</p>} />
     );
   },
 };
@@ -138,39 +139,43 @@ export const MetricSelectHexagons: Story = {
   render: () => <MetricSelect value="claims" onChange={() => {}} claimsOnly />,
 };
 
-/** Several filters off their defaults: those buttons read darker and Reset appears. */
+/** Several filters off their defaults: those buttons get a dark outline, and each value is a chip that can be removed. */
 export const FiltersChanged: Story = {
-  name: 'Filter bar · filters changed',
+  name: 'Filter bar · filters changed (chips)',
   render: () => {
-    const [f, setF] = useState<Filters>({ ...S.defaultFilters, radiusMiles: 2, prizeBand: '1k-9k', storeClaims: [5, 100], prices: [10, 20] });
+    const [f, setF] = useState<Filters>({
+      ...S.defaultFilters, radiusMiles: 2, prizeBand: '1k-9k', storeClaims: [5, 100], prices: [10, 20], gameIds: S.gameRefs.slice(0, 6).map((g) => g.id),
+    });
     return (
       <FilterBar filters={f} defaults={S.defaultFilters} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
-        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)} />
+        claimCounts={sampleGameCounts} onChange={setF} />
     );
   },
 };
 
 const LAYER_DEFAULTS = { areaShape: 'tracts' as AreaShape, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true };
+const panelLegend = (metric: MetricKey) => ({
+  metric, breaks: metric === 'income' ? [62000, 81000, 99000, 124000] : metric === 'claims' ? [1, 2, 4, 7] : [0.5, 1, 2, 3.5],
+  min: metric === 'income' ? 31000 : 0, max: metric === 'income' ? 210000 : 19, tractCount: 104, noDataCount: 12, coverage: S.coverage,
+});
 
-export const Layers: Story = {
-  render: () => {
-    const [s, setS] = useState(LAYER_DEFAULTS);
-    return <LayerControls {...s} onChange={(p) => setS({ ...s, ...p })} />;
-  },
-};
-
-/** The row over the map's top-left corner. Streets and satellite need a Mapbox token, so they are off here. */
-export const MapToolbar_: StoryObj<{ online: boolean }> = {
-  name: 'Map toolbar',
+/** The docked panel beside the map. Streets and satellite need a Mapbox token, so they are off here. */
+export const MapPanel_: StoryObj<{ online: boolean }> = {
+  name: 'Map panel',
   args: { online: false },
   render: ({ online }) => {
     const [s, setS] = useState(LAYER_DEFAULTS);
     const [m, setM] = useState<MetricKey>('income');
+    const [m2, setM2] = useState<MetricKey>('claims');
     const [b, setB] = useState<Basemap>('outline');
     const [cmp, setCmp] = useState(false);
     return (
-      <MapToolbar {...s} onChange={(p) => setS({ ...s, ...p })} metric={m} onMetric={setM} basemap={b} onBasemap={setB}
-        online={online} onGoOnline={() => {}} compare={cmp} onCompare={setCmp} />
+      <div className="flex h-[720px]">
+        <MapPanel layers={s} onLayers={(p) => setS({ ...s, ...p })} basemap={b} onBasemap={setB} online={online} onGoOnline={() => {}}
+          compare={cmp} onCompare={setCmp} playing={false} onPlay={() => {}} onCollapse={() => {}}
+          primary={{ metric: m, onMetric: setM, legend: { ...panelLegend(m), bubbles: { breaks: [2, 5, 9, 14], min: 1, max: 40, stores: 61, hotMin: 30 }, winners: sampleWinners } }}
+          secondary={cmp ? { metric: m2, onMetric: setM2, legend: panelLegend(m2) } : undefined} />
+      </div>
     );
   },
 };

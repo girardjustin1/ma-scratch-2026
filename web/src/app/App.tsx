@@ -16,7 +16,7 @@ import type { ExploreData } from '../pages/ExplorePage';
 import type { Filters } from '../domain/types';
 import { loadLocalView } from '../data/localView';
 import { addDays } from '../lib/format';
-import { DEMO_NOTICE, LOCAL_NOTICE, SAMPLE_NOTICE } from '../lib/copy';
+import { DEMO_NOTICE, LOCAL_NOTICES, SAMPLE_NOTICE } from '../lib/copy';
 import { loadSampleIssue, sampleReportIndex } from '../fixtures/sampleReports';
 
 /** Sample issues link to the local app; on the public demo, point them at the demo instead. */
@@ -103,7 +103,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
     <RoutingContext.Provider value={routed}>
     <ModeProvider mode={mode}>
       <AppShell tab={tab} onTab={setTab} online={online} mode={mode} onToggleMode={() => setMode(mode === 'dark' ? 'light' : 'dark')}
-        notice={local ? LOCAL_NOTICE : demo ? DEMO_NOTICE : SAMPLE_NOTICE} demo={demo} unreadReports={reports.unread}>
+        notice={local ? LOCAL_NOTICES[tab] : demo ? DEMO_NOTICE : SAMPLE_NOTICE} demo={demo} unreadReports={reports.unread}>
         {/* Keyed so back/forward remounts the page and it re-reads its deep link. */}
         <Fragment key={`${tab}-${nav}`}>
         {!loaded && <p className="p-6 text-sm text-tertiary">Loading the local data…</p>}
@@ -111,6 +111,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {tab === 'map' && (
           <ExplorePage key={view ? `local-${place?.id ?? 'pin'}-${radiusMiles}` : (mapGame ?? 'all')} data={view ?? sampleExploreData} initialFilters={filters} online={online}
             onGoOnline={demo ? undefined : () => setOnline(true)}
+            homeLabel={view ? (place?.label ?? 'the default pin') : undefined}
             locationSlot={view && settings ? <LocationButton settings={settings} defaultLabel="Default pin" onPress={openLocation} /> : undefined} />
         )}
         {tab === 'games' && (local?.ev

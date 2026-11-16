@@ -7,10 +7,10 @@ import { classLabels } from '../domain/classify';
 import type { Coverage, MetricKey } from '../domain/types';
 import { hexSizeLabel, type HexLayer } from '../domain/hexes';
 import { CAVEATS, LABELS } from '../lib/copy';
-import { fmtCompactUsd, fmtInt, fmtRange } from '../lib/format';
+import { fmtCompactUsd, fmtInt } from '../lib/format';
 import { useMode } from '../theme/mode';
 import { bubbleRadii, bubbles as bubbleTokens, chrome, noData, ramps, status } from '../theme/tokens';
-import { Card } from './Basics';
+import { Card, Info } from './Basics';
 import { WinnersKey, type WinnersKeyProps } from './WinnersKey';
 
 const TITLES: Record<MetricKey, string> = {
@@ -43,6 +43,21 @@ export interface MapLegendProps {
   winners?: WinnersKeyProps;
   /** The hexagon layer is on: the key describes hexagons instead of tracts. */
   hexes?: HexLayer | null;
+  /** Inside the map panel: no card around it. */
+  bare?: boolean;
+  /** The metric is named by a control right above (the panel's dropdown), so leave the title out. */
+  hideTitle?: boolean;
+  /** classes = the area swatches only; stores = the store key and winners only. Default: everything. */
+  parts?: 'all' | 'classes' | 'stores';
+}
+
+/** The caveat for what the areas show, plus how the classes were cut. Shown behind an info icon. */
+export function legendNote({ metric, breaks, tractCount, hexes }: Pick<MapLegendProps, 'metric' | 'breaks' | 'tractCount' | 'hexes'>) {
+  const b = hexes?.breaks ?? breaks;
+  const cut = metric === 'claims' && b.join() === '0,1,3,9' ? 'Fixed classes' : 'Quantile classes';
+  const over = hexes ? `${fmtInt(hexes.inRadius)} hexagons (${hexSizeLabel(hexes.res)})` : `${fmtInt(tractCount)} tracts`;
+  const caveat = metric === 'income' ? CAVEATS.ecological : metric === 'perRetailer' ? CAVEATS.perRetailer : CAVEATS.listedOnly;
+  return `${cut} over ${over} in the radius. ${caveat}${metric !== 'income' ? ` ${CAVEATS.matchedOnly}` : ''}${hexes ? ` ${CAVEATS.hexes}` : ''}`;
 }
 
 /** Fixed-size slot so every key mark lines up with its label. */
@@ -55,7 +70,7 @@ const Key = ({ children }: { children: React.ReactNode }) => (
  * tokens the map paints with, so the legend always matches what is drawn.
  */
 export function MapLegend(props: MapLegendProps) {
-  const { metric, tractCount, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls, winners, hexes = null } = props;
+  const { metric, noDataCount, coverage, lowMatchCount = 0, bubbles, storeControls, winners, hexes = null, bare = false, hideTitle = false, parts = 'all' } = props;
   // Hexagons always show listed claims, with their own classes.
   const { breaks, min, max } = hexes ?? props;
   const mode = useMode();
@@ -64,15 +79,17 @@ export function MapLegend(props: MapLegendProps) {
   const classes = ramp.slice(0, breaks.length + 1);
   const hatch = noData[mode];
   const ink = chrome[mode].ink;
+  const lowMatch = !hexes && metric !== 'income' && lowMatchCount > 0;
 
-  return (
-    <Card className="w-[260px] p-4">
-      <p className="text-sm font-semibold text-primary">{hexes ? `${LABELS.listedClaims} per hexagon` : TITLES[metric]}</p>
-      <p className="mb-2.5 text-xs text-tertiary tabular">
-        {metric === 'claims' && breaks.join() === '0,1,3,9' ? 'Fixed classes' : 'Quantile classes'} ·{' '}
-        {hexes ? `${fmtInt(hexes.inRadius)} hexagons, ${hexSizeLabel(hexes.res)}` : `${fmtInt(tractCount)} tracts`}
-      </p>
-      <ul className="flex flex-col gap-1.5">
+  const body = (
+    <>
+      {!hideTitle && parts !== 'stores' && (
+        <p className="mb-2.5 flex items-center gap-1.5 text-sm font-semibold text-primary">
+          {hexes ? `${LABELS.listedClaims} per hexagon` : TITLES[metric]}
+          <Info label="About this layer" text={legendNote(props)} />
+        </p>
+      )}
+      {parts !== 'stores' && <ul className="flex flex-col gap-1.5">
         {classes.map((color, i) => (
           <li key={color} className="flex items-center gap-2">
             <Key><span className="h-3 w-full rounded-sm" style={{ backgroundColor: color }} /></Key>
@@ -82,7 +99,7 @@ export function MapLegend(props: MapLegendProps) {
         {hexes ? (
           <li className="flex items-center gap-2">
             <Key><span className="h-3 w-full rounded-sm" style={{ border: `1px solid ${chrome[mode].grid}` }} /></Key>
-            <span className="text-sm text-secondary">Blank: no licensed stores</span>
+            <span className="text-sm text-secondary">No licensed stores</span>
           </li>
         ) : <li className="flex items-center gap-2">
           <Key>
@@ -99,35 +116,28 @@ export function MapLegend(props: MapLegendProps) {
             <span className="text-xs text-tertiary tabular"> · {fmtInt(noDataCount)}</span>
           </span>
         </li>}
-      </ul>
-      {bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} controls={storeControls} />}
-      {winners && <WinnersKey {...winners} />}
-      <div className="mt-3 flex flex-col gap-1.5 border-t border-secondary pt-3">
-        <div className="flex items-center gap-2">
-          {!coverage.statewide && <Key><span className="w-full" style={{ borderTop: `2px solid ${ink}`, opacity: 0.85 }} /></Key>}
-          <span className="text-xs text-secondary tabular">
-            {coverage.statewide ? 'Coverage: statewide' : 'Coverage boundary'} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
-          </span>
-        </div>
-        {!hexes && metric !== 'income' && lowMatchCount > 0 && (
-          <div className="flex items-center gap-2">
-            <Key><span className="h-3 w-full rounded-sm" style={{ border: `2px dashed ${status.warning}` }} /></Key>
-            <AlertTriangle className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden />
-            <span className="text-xs text-secondary tabular">Low match rate (under 80%) · {fmtInt(lowMatchCount)}</span>
-          </div>
+        {/* Lines drawn on the map that need a key: the coverage edge (when not statewide) and low-match tracts. */}
+        {!coverage.statewide && (
+          <li className="flex items-center gap-2">
+            <Key><span className="w-full" style={{ borderTop: `2px solid ${ink}`, opacity: 0.85 }} /></Key>
+            <span className="text-sm text-secondary">Coverage boundary</span>
+          </li>
         )}
-        <div className="flex items-center gap-2">
-          <Key><span className="w-full" style={{ borderTop: `2px dashed ${ink}`, opacity: 0.7 }} /></Key>
-          <span className="text-xs text-secondary">Search radius</span>
-        </div>
-        <p className="mt-1 text-xs leading-[1.45] text-tertiary">
-          {metric === 'income' ? CAVEATS.ecological : metric === 'perRetailer' ? CAVEATS.perRetailer : CAVEATS.listedOnly}
-          {metric !== 'income' && <> {CAVEATS.matchedOnly}</>}
-          {hexes && <> {CAVEATS.hexes}</>}
-        </p>
-      </div>
-    </Card>
+        {lowMatch && (
+          <li className="flex items-center gap-2">
+            <Key><span className="h-3 w-full rounded-sm" style={{ border: `2px dashed ${status.warning}` }} /></Key>
+            <span className="flex items-center gap-1 text-sm text-secondary">
+              <AlertTriangle className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden />Low match rate
+              <span className="text-xs text-tertiary tabular">· {fmtInt(lowMatchCount)}</span>
+            </span>
+          </li>
+        )}
+      </ul>}
+      {parts !== 'classes' && bubbles && bubbles.stores > 0 && <BubbleKey {...bubbles} controls={storeControls} />}
+      {parts !== 'classes' && winners && <WinnersKey {...winners} />}
+    </>
   );
+  return bare ? <div>{body}</div> : <Card className="w-[260px] p-4">{body}</Card>;
 }
 
 /** A store in view, for the legend's list. cls: 0–4 by the bubble breaks, -1 = no listed claims. */
@@ -191,16 +201,18 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
     : visible;
   return (
     <div className="mt-3 border-t border-secondary pt-3">
-      <div className="flex items-baseline gap-2">
-        <p className="flex-1 text-sm font-semibold text-primary">Stores · listed claims</p>
+      <div className="mb-2 flex items-baseline gap-2">
+        <p className="flex flex-1 items-center gap-1.5 text-sm font-semibold text-primary">Stores · listed claims
+          <Info label="About the store key" text={<>
+            {breaks.join() === '1,2,4,9' ? 'Fixed classes' : 'Quantile classes'} over the {fmtInt(stores)} stores with listed claims in the radius.
+            {controls && ' Click a row to show or hide those stores; the numbers are stores in view.'}
+            {' '}A numbered circle is a group of stores when zoomed out: its number and size are the group’s total, its color the average per licensed store.
+          </>} />
+        </p>
         {controls && controls.hidden.size > 0 && (
           <button type="button" onClick={controls.onShowAll} className="cursor-pointer text-xs font-semibold text-secondary hover:text-primary">Show all</button>
         )}
       </div>
-      <p className="mb-2 text-xs text-tertiary tabular">
-        {breaks.join() === '1,2,4,9' ? 'Fixed classes' : 'Quantile classes'} · {fmtInt(stores)} stores with listed claims in radius
-        {controls && <> · click a row to show or hide; numbers are stores in view</>}
-      </p>
       <ul className="flex flex-col gap-0.5">
         {labels.map((label, i) => (
           <KeyRow key={label} cls={i} hidden={!!controls?.hidden.has(i)} count={count(i)} onToggle={controls?.onToggle}
@@ -231,9 +243,7 @@ function BubbleKey({ breaks, min, max, stores, hotMin = null, controls }: {
               120
             </span>
           </span>
-          <span className="text-xs leading-[1.4] text-secondary">
-            Group of stores when zoomed out: number and size = total; color = average per licensed store
-          </span>
+          <span className="text-sm text-secondary">Group of stores</span>
         </li>
       </ul>
       {controls && (

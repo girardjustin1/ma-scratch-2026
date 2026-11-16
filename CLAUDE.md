@@ -32,12 +32,22 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
 
 ## Map page controls
 
-- Header = **what data**: one row of filter buttons (`FilterBar` in `components/Controls.tsx`):
-  location, radius, listed dates, games, prize size, stores by listed claims. Each button shows
-  its value and opens a panel. A filter off its default gets a dark outline; Reset shows only
-  then. A summary line (count, covered tracts, coverage) sits under the row.
-- On the map = **how it is drawn** (`MapToolbar`): metric dropdown, basemap, Layers panel
-  (tracts/hexagons, fills, bubbles), side by side. It passes clicks through between controls.
+- Header = **what data** (`FilterBar` in `components/Controls.tsx`): one row of filter buttons
+  (location, radius, listed dates, games, prize size, stores by listed claims), each showing
+  its value and opening a panel, with the result count at the end. Anything off its default
+  also shows as a removable chip in a row below (`filterChips`), with Clear all.
+- Left of the map = **how it is drawn** (`components/MapPanel.tsx`), one docked, collapsible
+  panel: basemap, Tracts | Hexagons, side by side, Play, Display (fills, bubbles), then the key
+  (metric dropdown + classes per map, store key, stores in view, winners by ticket). Nothing
+  floats over the map except zoom, the re-center button, the selection card and, while
+  playing, the playback transport.
+- Owner asked (2026-11-16) to remove extraneous text. Explanations and caveats now sit behind
+  info icons (`Info` in `Basics.tsx`) instead of always-on paragraphs. Do not delete a caveat
+  outright: the rules at the top still apply, so keep each one a hover away from what it
+  qualifies. The local app shows a banner only on tabs that still hold sample data
+  (`LOCAL_NOTICES` in `copy.ts`); the demo and Storybook banners stay.
+- The date picker opens on the end of the selected range, so today's dot and the days the
+  data does not reach yet (greyed) are in view.
 - Filter rules live in `domain/filterState.ts`: limits, what counts as changed, and deep-link
   params (`from to games prices prize radius stores`). A bad or out-of-range param falls back
   for that filter alone. The pin is never written to a link.
@@ -49,7 +59,7 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
 
 ## Hexagon layer
 
-- Layers panel → Tracts | Hexagons. `web/src/domain/hexes.ts` sums the filtered listed claims of the
+- Map panel → Tracts | Hexagons. `web/src/domain/hexes.ts` sums the filtered listed claims of the
   stores in each H3 cell (res 6/7/8 by zoom), in the browser, from the same claims as the bubbles.
 - Hexagons are listed claims only: picking them sets the metric to claims and disables the
   census metrics; switching back restores the previous metric. Cells with no stores are blank.

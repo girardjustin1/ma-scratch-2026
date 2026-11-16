@@ -10,16 +10,20 @@ import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
 import type { EvData } from '../data/localView';
 import type { PaceData } from '../domain/pace';
 import { DEFAULT_FILL_OPACITY, isBasemap, type Basemap } from '../map/mapStyle';
-import { CoverageChip } from '../components/Basics';
-import { FilterBar, MapToolbar, MetricSelect } from '../components/Controls';
+import { LayersThree01, Target05 } from '@untitledui/icons';
+import { Button } from '@/components/base/buttons/button';
+import { ButtonUtility } from '@/components/base/buttons/button-utility';
+import { Info } from '../components/Basics';
+import { FilterBar } from '../components/Controls';
+import { MapPanel } from '../components/MapPanel';
 import { filterParams, filtersFromParams, STORE_CLAIMS_MAX } from '../domain/filterState';
-import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
+import type { StoreInView, StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
 import { Playback, WINDOW_DAYS, type PlayMode } from '../components/Playback';
 import { HexCard, StoreCard, TractCard, type PanelTab, type StoreTrend, type TrendWindow } from '../components/SelectionCard';
 import { PlaceDetails } from '../components/PlaceDetails';
-import { addDays, daysBetween, fmtDate, fmtInt } from '../lib/format';
-import { LABELS } from '../lib/copy';
+import { addDays, daysBetween, fmtDate, fmtInt, fmtRange } from '../lib/format';
+import { CAVEATS, LABELS } from '../lib/copy';
 import { groupWinners, type WinnerGrouping, type WinnerRow } from '../domain/winners';
 import type { WinnersKeyProps } from '../components/WinnersKey';
 import { readParam, useRouted, writeParams } from '../app/route';
@@ -55,6 +59,8 @@ export interface ExplorePageProps {
   initialArea?: AreaShape;
   /** Header control for where the radius starts (the app's location button). */
   locationSlot?: ReactNode;
+  /** Name of the place the map starts on (the active saved place), for the re-center button. */
+  homeLabel?: string;
 }
 
 const METRICS: MetricKey[] = ['claims', 'income', 'perRetailer'];
@@ -132,7 +138,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
 
 export function ExplorePage({
   data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, onGoOnline, initialBasemap,
-  initialArea = 'tracts', locationSlot,
+  initialArea = 'tracts', locationSlot, homeLabel,
 }: ExplorePageProps) {
   const routed = useRouted();
   // Deep link (routed app only): the URL overrides the initial props.
@@ -384,54 +390,75 @@ export function ExplorePage({
     setLayers({ ...layers, areaShape });
   };
 
-  // The view toolbar runs along the top (left of the zoom buttons) and lets clicks through
-  // between its controls; the legend sits bottom-right and scrolls on its own.
-  const controlsBox = 'pointer-events-none absolute top-3 left-3 right-14 *:pointer-events-auto';
-  const legendBox = 'absolute right-3 bottom-7 max-h-[calc(100%-5.5rem)] overflow-y-auto rounded-xl';
+  const [panelOpen, setPanelOpen] = useState(true);
+  // Back to where the map started: the saved place (or default pin), framed to the current radius.
+  const home = initialFilters.pin;
+  const recenter = () => setView((v) => ({ ...v, longitude: home[0], latitude: home[1], zoom: Math.min(14, Math.max(8, 10.4 + Math.log2(5 / filters.radiusMiles))) }));
+  const playTo = filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo;
+  const count = playInRadius ?? a.claimsInRadius;
+  // A small tag naming each map, only when two are side by side.
+  const mapTag = 'pointer-events-none absolute top-3 left-3 rounded-md bg-primary/90 px-2 py-0.5 text-xs font-medium text-secondary shadow-xs ring-1 ring-secondary';
+  const TITLE: Record<MetricKey, string> = { claims: LABELS.listedClaims, income: LABELS.medianIncome, perRetailer: LABELS.claimsPerRetailer };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-secondary bg-primary px-6 py-2.5">
         <FilterBar
           filters={filters} defaults={initialFilters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
-          claimCounts={a.claimCounts} onChange={setFilters} onReset={() => setFilters(initialFilters)}
+          claimCounts={a.claimCounts} onChange={setFilters}
           locationSlot={locationSlot}
           summary={
-            <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-tertiary tabular">
-              <span className="font-medium text-secondary">
-                {fmtInt(playInRadius ?? a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius{playDate ? ` through ${fmtDate(playDate)}` : ''}
-              </span>
-              <span aria-hidden>·</span>{fmtInt(covered)} covered tracts
-              <span aria-hidden>·</span><CoverageChip coverage={data.coverage} plain />
+            <p className="flex items-center gap-1.5 text-sm text-secondary tabular">
+              <span><span className="font-semibold text-primary">{fmtInt(count)}</span> listed claim{count === 1 ? '' : 's'}{playDate ? ` through ${fmtDate(playDate)}` : ''}</span>
+              <Info label="About this count" text={<>
+                {LABELS.listedClaims} at stores in the {fmtInt(covered)} covered tracts inside the radius, under the filters.
+                {' '}Coverage: {data.coverage.label}, {fmtRange(data.coverage.dateFrom, data.coverage.dateTo)}. {CAVEATS.coverage}
+              </>} />
             </p>
           }
         />
       </div>
       <div className="flex min-h-0 flex-1">
+      {panelOpen && (
+        <MapPanel
+          basemap={layers.basemap} onBasemap={setBasemap} online={online} onGoOnline={onGoOnline}
+          layers={layers} onLayers={({ areaShape, ...p }) => (areaShape ? setArea(areaShape) : setLayers({ ...layers, ...p }))}
+          compare={compare} onCompare={setCompare}
+          playing={playing} onPlay={() => setPlayDate(filters.dateFrom)}
+          onCollapse={() => setPanelOpen(false)}
+          primary={{ metric, onMetric: setMetric, legend: {
+            metric, breaks: a.breaks, min: a.min, max: a.max, tractCount: a.tractCount, noDataCount: a.noDataCount, lowMatchCount: a.lowMatchCount,
+            coverage: data.coverage, bubbles: layers.showBubbles ? a.bubbleScale : undefined, storeControls: layers.showBubbles ? storeControls : undefined,
+            winners, hexes,
+          } }}
+          secondary={compare ? { metric: metricB, onMetric: setMetricB, legend: {
+            metric: metricB, breaks: b.breaks, min: b.min, max: b.max, tractCount: b.tractCount, noDataCount: b.noDataCount, lowMatchCount: b.lowMatchCount,
+            coverage: data.coverage,
+          } } : undefined}
+        />
+      )}
       <div className="grid min-h-0 min-w-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
-        <div className="@container relative min-h-0">
+        <div className="relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={storeCounts} playing={playing}
             storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
             viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds}
             hexes={hexes} onSelectHex={(cell, lngLat) => { setSelection({ kind: 'hex', cell, lngLat }); setPanelTab(null); }} />
-          <div className="absolute bottom-7 left-3 z-10">
-            <Playback from={filters.dateFrom} to={filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo}
-              value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
+          {/* Under the zoom buttons, in their style. */}
+          <div className="absolute top-[78px] right-[10px] rounded-[4px] bg-white shadow-[0_0_0_2px_rgba(0,0,0,0.1)]">
+            <ButtonUtility size="xs" color="tertiary" icon={Target05} tooltip={`Center on ${homeLabel ?? 'the pin'}`} tooltipPlacement="left"
+              className="size-[29px] rounded-[4px] text-black hover:bg-black/5" onClick={recenter} />
           </div>
-          <div className={controlsBox}>
-            <MapToolbar {...layers} metric={metric} onMetric={setMetric} onBasemap={setBasemap} online={online} onGoOnline={onGoOnline}
-              compare={compare} onCompare={setCompare}
-              onChange={({ areaShape, ...p }) => (areaShape ? setArea(areaShape) : setLayers({ ...layers, ...p }))} />
-          </div>
-          <div className={legendBox}>
-            <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
-              bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined}
-              winners={winners} hexes={hexes} />
-          </div>
-          {!compare && (
-            <p className="absolute top-3.5 right-13 hidden rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary @[1360px]:block">
-              Click a store or {layers.areaShape === 'hexes' ? 'hexagon' : 'tract'} for details · double-click to move the pin
-            </p>
+          {!panelOpen && (
+            <div className="absolute top-3 left-3">
+              <Button size="sm" color="secondary" iconLeading={LayersThree01} onClick={() => setPanelOpen(true)}>Map panel</Button>
+            </div>
+          )}
+          {compare && panelOpen && <p className={mapTag}>{hexes ? `${LABELS.listedClaims} per hexagon` : TITLE[metric]}</p>}
+          {/* The playback transport only exists while playing; the panel's Play button starts it. */}
+          {playDate !== null && (
+            <div className="absolute bottom-7 left-3 z-10">
+              <Playback from={filters.dateFrom} to={playTo} value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
+            </div>
           )}
         </div>
         {compare && (
@@ -439,13 +466,7 @@ export function ExplorePage({
             <ClaimsMap {...mapProps} metric={metricB} metrics={b.metrics} breaks={b.breaks} claimsByRetailer={b.claimsByRetailer}
               storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks} hotMin={b.bubbleScale.hotMin}
               viewState={view} onMove={setView} />
-            <div className={controlsBox}>
-              <MetricSelect value={metricB} onChange={setMetricB} label="Color areas by (right map)" />
-            </div>
-            <div className={legendBox}>
-              <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage}
-                bubbles={layers.showBubbles ? b.bubbleScale : undefined} />
-            </div>
+            <p className={mapTag}>{TITLE[metricB]}</p>
           </div>
         )}
       </div>

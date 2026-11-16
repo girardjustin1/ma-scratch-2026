@@ -37,8 +37,15 @@ export const CAVEATS = {
     'Counts are a floor: claims at stores that could not be matched by name and town, or whose location could not be verified, are left out.',
 } as const;
 
-export const LOCAL_NOTICE =
-  'Map, open games, listing schedule and Statewide EV: real Lottery data, statewide, kept on this computer only. The statistical tests and Model still show sample data.';
+/**
+ * The local app runs on real Lottery data, so most tabs need no banner. These tabs still show
+ * sample data in part or in full, and say so.
+ */
+export const LOCAL_NOTICES: Record<string, string> = {
+  stats: 'The statistical tests on this tab are sample data. The listing schedule is real.',
+  model: 'This tab shows sample data, not real Lottery activity.',
+  data: 'The sources listed on this tab are sample data, not the real refresh log.',
+};
 
 export const DEMO_NOTICE = 'Public demo with made-up sample data. Claims, games, stores and reports are not real Lottery activity; tract shapes and income are real Census data. The real dashboard runs only on its owner\'s computer.';
 
