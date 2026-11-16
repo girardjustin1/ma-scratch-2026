@@ -67,6 +67,18 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   reason, never "a sure thing"; the area is "your pin", never the address.
 - Stories use SYNTHETIC `emails/fixtures.ts` and `fixtures/sampleReports.ts`.
 
+## Settings: saved places
+
+- The Settings tab (`/settings`) looks up an address with one Google Places Text Search
+  through the local proxy (user-pressed, online only; matches outside MA are dropped), and
+  saves places to the gitignored `web/public/local/settings.json` via the dev server's
+  `/local-settings` endpoint (vite.config.ts). `src/settings/settings.ts` validates it.
+- The active place replaces the default pin: the map's center and radius, and the area new
+  reports describe (`scripts/publish-reports.ts` reads the file). Published issues keep theirs.
+- A saved address is personal: never in a URL, a commit, a fixture or the public demo. The
+  summary there (`src/settings/around.ts`) counts claims at stores within the radius, so it
+  can differ from the map header's tract-based count; say so, never blend the two.
+
 ## Data handling
 
 - `data/` and `.env*` are gitignored and never committed. The repo is **public**, and the

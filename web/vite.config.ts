@@ -2,7 +2,9 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { DEFAULT_SETTINGS, SETTINGS_URL, validSettings } from './src/settings/settings';
 
 // ---------------------------------------------------------------------------------------
 // Google Places proxy (dev + preview only).
@@ -172,6 +174,36 @@ function googleProxy(apiKey: string): Plugin {
   };
 }
 
+// ---------------------------------------------------------------------------------------
+// Local settings (dev server only): saved places for the Settings tab, in the gitignored
+// web/public/local/settings.json. GET returns them (defaults when the file is missing);
+// PUT validates and writes atomically. Nothing here goes online.
+function localSettings(): Plugin {
+  const file = fileURLToPath(new URL('./public/local/settings.json', import.meta.url));
+  return {
+    name: 'local-settings',
+    configureServer(server) {
+      server.middlewares.use(SETTINGS_URL, (req, res) => void (async () => {
+        if (req.method === 'GET') {
+          let saved = null;
+          try { saved = existsSync(file) ? validSettings(JSON.parse(readFileSync(file, 'utf8'))) : null; } catch { saved = null; }
+          return sendJson(res, 200, saved ?? DEFAULT_SETTINGS);
+        }
+        if (req.method === 'PUT') {
+          let next = null;
+          try { next = validSettings(JSON.parse(await readBody(req))); } catch { next = null; }
+          if (!next) return sendJson(res, 400, { error: 'bad_settings' });
+          mkdirSync(fileURLToPath(new URL('./public/local/', import.meta.url)), { recursive: true });
+          writeFileSync(file + '.part', JSON.stringify(next, null, 2));
+          renameSync(file + '.part', file);
+          return sendJson(res, 200, next);
+        }
+        return sendJson(res, 405, { error: 'method_not_allowed' });
+      })());
+    },
+  };
+}
+
 // All assets are bundled from node_modules; nothing loads from a CDN, so the app
 // works with the network disabled. Only the optional Mapbox basemap and the optional
 // Google Place tab (through the proxy above) go online.
@@ -184,7 +216,7 @@ export default defineConfig(({ mode }) => {
   const demo = process.env.VITE_DEMO === '1';
   return {
     ...(demo ? { base: process.env.BASE_PATH || '/', envDir: false as const, publicDir: false as const } : {}),
-    plugins: [react(), tailwindcss(), googleProxy(apiKey)],
+    plugins: [react(), tailwindcss(), googleProxy(apiKey), localSettings()],
     // "@/..." is Untitled UI's import root (src/uui), kept so its copied files stay unedited.
     resolve: { alias: { '@': fileURLToPath(new URL('./src/uui', import.meta.url)) } },
     server: { host: '127.0.0.1', port: 5180, strictPort: true },

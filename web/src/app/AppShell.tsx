@@ -4,7 +4,7 @@ import { ButtonUtility } from '@/components/base/buttons/button-utility';
 import { OnlineChip } from '../components/SourcesPanel';
 import { SampleBanner } from '../components/Basics';
 
-export type TabKey = 'map' | 'games' | 'ev' | 'stats' | 'model' | 'data' | 'reports';
+export type TabKey = 'map' | 'games' | 'ev' | 'stats' | 'model' | 'data' | 'reports' | 'settings';
 export const TABS: { key: TabKey; label: string }[] = [
   { key: 'map', label: 'Map' },
   { key: 'games', label: 'Open games' },
@@ -13,6 +13,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: 'model', label: 'Model' },
   { key: 'data', label: 'Data' },
   { key: 'reports', label: 'Reports' },
+  { key: 'settings', label: 'Settings' },
 ];
 
 export interface AppShellProps {
