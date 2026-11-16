@@ -5,8 +5,9 @@ import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
 import { ReportsPage } from '../pages/ReportsPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { sampleLookup, sampleSettings } from '../fixtures/sampleSettings';
-import type { LocalSettings } from '../settings/settings';
+import { sampleAutocomplete, sampleLookup, sampleSettings } from '../fixtures/sampleSettings';
+import { activePlace, type LocalSettings } from '../settings/settings';
+import { LocationButton, LocationDialog } from '../settings/LocationDialog';
 import { loadSampleIssue, sampleReportIndex } from '../fixtures/sampleReports';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
 import { samplePace, samplePaceData } from '../fixtures/samplePace';
@@ -71,7 +72,7 @@ function SettingsStory({ initial, online }: { initial: LocalSettings; online: bo
   const [settings, setSettings] = useState(initial);
   return (
     <Frame><SettingsPage data={sampleExploreData} defaultCenter={S.coverage.center} settings={settings}
-      onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} online={online}
+      onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} autocomplete={sampleAutocomplete} online={online}
       onGoOnline={() => {}} onOpenMap={() => {}} onOpenGames={() => {}} /></Frame>
   );
 }
@@ -86,4 +87,32 @@ export const SettingsEmpty: StoryObj = {
 export const SettingsDemo: StoryObj = {
   name: 'Settings · public demo',
   render: () => <Frame><SettingsPage data={sampleExploreData} defaultCenter={S.coverage.center} settings={null} online={false} demo /></Frame>,
+};
+
+/** The map's location button and dialog, with saves kept in memory. Made-up places only. */
+function LocationStory({ initial, firstRun }: { initial: LocalSettings; firstRun: boolean }) {
+  const [settings, setSettings] = useState(initial);
+  const [open, setOpen] = useState(true);
+  const [first, setFirst] = useState(firstRun);
+  const place = activePlace(settings);
+  const data = place ? { ...sampleExploreData, coverage: { ...sampleExploreData.coverage, center: [place.lon, place.lat] as [number, number] } } : sampleExploreData;
+  return (
+    <Frame>
+      <ExplorePage key={`${place?.id ?? 'pin'}-${settings.radiusMiles}`} data={data}
+        initialFilters={{ ...S.defaultFilters, pin: data.coverage.center, radiusMiles: settings.radiusMiles }}
+        locationSlot={<LocationButton settings={settings} defaultLabel="Sample pin" onPress={() => { setFirst(false); setOpen(true); }} />} />
+      <LocationDialog isOpen={open} onOpenChange={setOpen} firstRun={first} data={sampleExploreData} defaultLabel="Sample pin"
+        settings={settings} onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} autocomplete={sampleAutocomplete} online onGoOnline={() => {}} />
+    </Frame>
+  );
+}
+
+export const LocationFirstRun: StoryObj = {
+  name: 'Map · location prompt (no place saved)',
+  render: () => <LocationStory initial={{ places: [], activeId: null, radiusMiles: 5 }} firstRun />,
+};
+
+export const LocationDialogStory: StoryObj = {
+  name: 'Map · location dialog',
+  render: () => <LocationStory initial={sampleSettings} firstRun={false} />,
 };

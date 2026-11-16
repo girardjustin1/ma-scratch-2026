@@ -61,8 +61,11 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   issue is never rebuilt. Weekly Mon–Sun on Mondays, monthly on the 1st, featured and +EV
   weekly only with a prize table saved after the week, nearby daily when claims are listed
   within 1 mi. First run backfills (marked, never unread).
-- Notification is in-app only: unread count on the Reports tab and "new" markers, kept in this
-  browser's localStorage. No system notifications.
+- Notification: unread count on the Reports tab and "new" markers (this browser's localStorage),
+  plus one local macOS notification when a new weekly issue publishes (Mondays; owner asked for
+  a Monday check of new winners, 2026-11-16). Text goes to osascript as arguments; it never
+  fails the job; `--no-notify` or `MA_SCRATCH_NO_NOTIFY=1` turns it off. Nothing is emailed.
+- Weekly issues list every listed claim in the area that week (`winners`), newest first.
 - Honesty rules as in the app: every +EV estimate above 100% carries "Check inputs" and a
   reason, never "a sure thing"; the area is "your pin", never the address.
 - Stories use SYNTHETIC `emails/fixtures.ts` and `fixtures/sampleReports.ts`.
@@ -75,6 +78,16 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   `/local-settings` endpoint (vite.config.ts). `src/settings/settings.ts` validates it.
 - The active place replaces the default pin: the map's center and radius, and the area new
   reports describe (`scripts/publish-reports.ts` reads the file). Published issues keep theirs.
+- The map header has a location button (active place · radius) that opens the location dialog
+  (`src/settings/LocationDialog.tsx`; lookup shared with Settings via `PlaceSearch.tsx`). With
+  no place saved, the dialog opens once at start; "Keep the default pin for now" is remembered
+  in this browser's localStorage (`ma-scratch:location-prompt`). Off in the public demo.
+- Address suggestions (online only): Places Autocomplete (New) through the proxy
+  (`/google/places/places:autocomplete`, restricted to MA bounds server-side), 300 ms after
+  typing stops, 3+ characters. A pick ends the session with one Essentials-tier details call
+  (`/google/places/address/<id>`, mask `id,formattedAddress,location`), so a picked session's
+  suggestions are not billed per request. Enter on a highlighted suggestion picks it and must
+  not also run Look up (Text Search). The input is never logged or stored.
 - A saved address is personal: never in a URL, a commit, a fixture or the public demo. The
   summary there (`src/settings/around.ts`) counts claims at stores within the radius, so it
   can differ from the map header's tract-based count; say so, never blend the two.

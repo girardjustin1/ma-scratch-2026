@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Columns03 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import type { ViewState } from '@vis.gl/react-maplibre';
@@ -51,6 +51,8 @@ export interface ExplorePageProps {
   initialBasemap?: Basemap;
   /** Start with the map filled by hexagons instead of tracts. */
   initialArea?: AreaShape;
+  /** Header control for where the radius starts (the app's location button). */
+  locationSlot?: ReactNode;
 }
 
 const METRICS: MetricKey[] = ['claims', 'income', 'perRetailer'];
@@ -140,7 +142,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
 
 export function ExplorePage({
   data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
-  initialArea = 'tracts',
+  initialArea = 'tracts', locationSlot,
 }: ExplorePageProps) {
   const routed = useRouted();
   // Deep link (routed app only): the URL overrides the initial props.
@@ -378,6 +380,7 @@ export function ExplorePage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-col gap-3 border-b border-secondary bg-primary px-6 py-3">
         <div className="flex flex-wrap items-center gap-3">
+          {locationSlot}
           <MetricSwitcher value={metric} onChange={setMetric} claimsOnly={layers.areaShape === 'hexes'} />
           <Button size="sm" color={compare ? 'primary' : 'secondary'} iconLeading={Columns03} onClick={() => setCompare(!compare)}
             aria-pressed={compare}>

@@ -86,6 +86,21 @@ export function InsightsEmail(d: InsightsData) {
           ))}
       </Block>
 
+      {d.winners && (
+        <Block title={`All new winners this week (${fmtInt(d.winners.length)})`}
+          note="Every claim the Lottery listed this week at stores in your area, newest listed date first.">
+          <DataTable
+            columns={[{ label: 'Listed', width: 64 }, { label: 'Game' }, { label: 'Store' }, { label: 'Prize', align: 'right' }]}
+            rows={d.winners.map((c) => [
+              fmtShortDate(c.listedDate),
+              <><A href={c.gameId && lotteryGameUrl(c.gameId)}>{c.game}</A>{c.price != null ? ` · $${c.price}` : ''}</>,
+              <Stack main={<A href={mapsUrl(c.store, c.address, c.town)}>{c.store}</A>} sub={c.town} />,
+              fmtUsd(c.prize),
+            ])}
+            empty={`No listed claims in your area ${w.thisP}.`} />
+        </Block>
+      )}
+
       {isMonth && d.topGames && d.topGames.length > 0 && (
         <Block title="Top games near you" note="Most listed claims in your area this month.">
           {d.topGames.map((g, i) => (

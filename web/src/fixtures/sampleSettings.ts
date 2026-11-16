@@ -1,4 +1,4 @@
-import type { AddressMatch, LookupResult } from '../data/geocode';
+import type { AddressAutocomplete, AddressMatch, LookupResult } from '../data/geocode';
 import type { LocalSettings } from '../settings/settings';
 import { SAMPLE_CENTER } from './sample';
 
@@ -22,3 +22,15 @@ const matches: AddressMatch[] = [
 /** A fake lookup: always the same two made-up matches, after a short pause. */
 export const sampleLookup = (): Promise<LookupResult> =>
   new Promise((resolve) => setTimeout(() => resolve({ ok: true, matches }), 300));
+
+/** A fake autocomplete over the same made-up places: matches on any word of the address. */
+export const sampleAutocomplete: AddressAutocomplete = {
+  suggest: (input) => new Promise((resolve) => setTimeout(() => {
+    const q = input.trim().toLowerCase();
+    const suggestions = matches
+      .filter((m) => m.address.toLowerCase().split(/[\s,]+/).some((w) => w.startsWith(q.split(/\s+/)[0])) || m.address.toLowerCase().includes(q))
+      .map((m, i) => ({ placeId: `sample-${i}`, main: m.label, secondary: m.address.split(', ').slice(1).join(', ') }));
+    resolve({ ok: true, suggestions });
+  }, 150)),
+  resolve: (s) => Promise.resolve({ ok: true, match: matches[Number(s.placeId.split('-')[1])] ?? null }),
+};
