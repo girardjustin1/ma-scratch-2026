@@ -7,7 +7,7 @@ import { FeaturedIcon } from '@/components/foundations/featured-icon/featured-ic
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import type { ExploreData } from '../pages/ExplorePage';
 import { PlaceRow, SELECTED } from '../pages/SettingsPage';
-import type { LookupResult } from '../data/geocode';
+import type { AddressAutocomplete, LookupResult } from '../data/geocode';
 import { PlaceSearch } from './PlaceSearch';
 import { activePlace, RADIUS_CHOICES, type LocalSettings, type SavedPlace } from './settings';
 
@@ -37,7 +37,7 @@ export function LocationButton({ settings, defaultLabel, onPress }: { settings: 
  * yet; closing it keeps the default pin and it does not open again in this browser.
  */
 export function LocationDialog({
-  isOpen, onOpenChange, firstRun = false, data, defaultLabel, settings, onChange, lookup, online, onGoOnline,
+  isOpen, onOpenChange, firstRun = false, data, defaultLabel, settings, onChange, lookup, autocomplete, online, onGoOnline,
 }: {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +47,7 @@ export function LocationDialog({
   settings: LocalSettings;
   onChange: (s: LocalSettings) => Promise<boolean>;
   lookup?: (query: string) => Promise<LookupResult>;
+  autocomplete?: AddressAutocomplete;
   online: boolean;
   onGoOnline?: () => void;
 }) {
@@ -83,7 +84,7 @@ export function LocationDialog({
               <CloseButton size="sm" onPress={close} className="-mt-1 -mr-2" />
             </div>
 
-            <PlaceSearch data={data} radiusMiles={settings.radiusMiles} lookup={lookup} online={online} onGoOnline={onGoOnline}
+            <PlaceSearch data={data} radiusMiles={settings.radiusMiles} lookup={lookup} autocomplete={autocomplete} online={online} onGoOnline={onGoOnline}
               onSave={(p) => void savePlace(p)} placeCount={settings.places.length} autoFocus />
 
             {(settings.places.length > 0 || !firstRun) && (

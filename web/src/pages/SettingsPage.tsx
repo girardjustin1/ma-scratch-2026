@@ -6,7 +6,7 @@ import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/but
 import { cx } from '@/utils/cx';
 import { Card, CaveatNote, Stat } from '../components/Basics';
 import type { ExploreData } from './ExplorePage';
-import type { LookupResult } from '../data/geocode';
+import type { AddressAutocomplete, LookupResult } from '../data/geocode';
 import { summarizeAround } from '../settings/around';
 import { PlaceSearch } from '../settings/PlaceSearch';
 import {
@@ -22,7 +22,7 @@ export const SELECTED = 'selected:bg-tertiary selected:text-primary';
  * shows what the local data holds around the active place. Places stay on this computer.
  */
 export function SettingsPage({
-  data, defaultCenter, settings, onChange, lookup, online, onGoOnline, onOpenMap, onOpenGames, demo = false,
+  data, defaultCenter, settings, onChange, lookup, autocomplete, online, onGoOnline, onOpenMap, onOpenGames, demo = false,
 }: {
   data: ExploreData;
   /** The default pin (web/.env.local, or the sample pin). */
@@ -32,6 +32,7 @@ export function SettingsPage({
   onChange?: (s: LocalSettings) => Promise<boolean>;
   /** Absent = address lookup is off. */
   lookup?: (query: string) => Promise<LookupResult>;
+  autocomplete?: AddressAutocomplete;
   online: boolean;
   onGoOnline?: () => void;
   onOpenMap?: () => void;
@@ -121,7 +122,7 @@ export function SettingsPage({
               <h2 className="text-md font-semibold text-primary">Add a place</h2>
               <p className="text-sm text-tertiary">Any address or place in Massachusetts.</p>
             </div>
-            <PlaceSearch data={data} radiusMiles={s.radiusMiles} lookup={canSave ? lookup : undefined} online={online} onGoOnline={onGoOnline}
+            <PlaceSearch data={data} radiusMiles={s.radiusMiles} lookup={canSave ? lookup : undefined} autocomplete={canSave ? autocomplete : undefined} online={online} onGoOnline={onGoOnline}
               onSave={canSave ? savePlace : undefined} placeCount={s.places.length} demo={demo} />
           </Card>
 

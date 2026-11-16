@@ -7,7 +7,7 @@ import { ExplorePage } from '../pages/ExplorePage';
 import { DataPage, EvPage, GamesPage, ModelPage, StatsPage } from '../pages/OtherPages';
 import { ReportsPage } from '../pages/ReportsPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { lookupAddress } from '../data/geocode';
+import { addressAutocomplete, lookupAddress } from '../data/geocode';
 import { loadSettings, saveSettings } from '../settings/localSettings';
 import { activePlace, type LocalSettings } from '../settings/settings';
 import { LocationButton, LocationDialog, locationPromptDismissed } from '../settings/LocationDialog';
@@ -130,7 +130,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {tab === 'settings' && (
           <SettingsPage data={local ?? sampleExploreData} defaultCenter={(local ?? sampleExploreData).coverage.center}
             settings={settings} onChange={settings ? changeSettings : undefined}
-            lookup={settings && !demo ? lookupAddress : undefined} online={online} onGoOnline={() => setOnline(true)}
+            lookup={settings && !demo ? lookupAddress : undefined} autocomplete={settings && !demo ? addressAutocomplete : undefined} online={online} onGoOnline={() => setOnline(true)}
             onOpenMap={() => setTab('map')} onOpenGames={() => setTab('games')} demo={demo} />
         )}
         {tab === 'reports' && <ReportsPage index={reports.index} seen={reports.seen} loadIssue={demo ? loadDemoIssue : undefined} />}
@@ -138,7 +138,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         </Fragment>
         {local && settings && (
           <LocationDialog isOpen={locOpen} onOpenChange={setLocOpen} firstRun={firstRun} data={local} defaultLabel="Default pin"
-            settings={settings} onChange={changeSettings} lookup={demo ? undefined : lookupAddress} online={online} onGoOnline={() => setOnline(true)} />
+            settings={settings} onChange={changeSettings} lookup={demo ? undefined : lookupAddress} autocomplete={demo ? undefined : addressAutocomplete} online={online} onGoOnline={() => setOnline(true)} />
         )}
       </AppShell>
     </ModeProvider>

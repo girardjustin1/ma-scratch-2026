@@ -5,7 +5,7 @@ import { App, sampleExploreData } from '../app/App';
 import { ExplorePage } from '../pages/ExplorePage';
 import { ReportsPage } from '../pages/ReportsPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { sampleLookup, sampleSettings } from '../fixtures/sampleSettings';
+import { sampleAutocomplete, sampleLookup, sampleSettings } from '../fixtures/sampleSettings';
 import { activePlace, type LocalSettings } from '../settings/settings';
 import { LocationButton, LocationDialog } from '../settings/LocationDialog';
 import { loadSampleIssue, sampleReportIndex } from '../fixtures/sampleReports';
@@ -72,7 +72,7 @@ function SettingsStory({ initial, online }: { initial: LocalSettings; online: bo
   const [settings, setSettings] = useState(initial);
   return (
     <Frame><SettingsPage data={sampleExploreData} defaultCenter={S.coverage.center} settings={settings}
-      onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} online={online}
+      onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} autocomplete={sampleAutocomplete} online={online}
       onGoOnline={() => {}} onOpenMap={() => {}} onOpenGames={() => {}} /></Frame>
   );
 }
@@ -102,7 +102,7 @@ function LocationStory({ initial, firstRun }: { initial: LocalSettings; firstRun
         initialFilters={{ ...S.defaultFilters, pin: data.coverage.center, radiusMiles: settings.radiusMiles }}
         locationSlot={<LocationButton settings={settings} defaultLabel="Sample pin" onPress={() => { setFirst(false); setOpen(true); }} />} />
       <LocationDialog isOpen={open} onOpenChange={setOpen} firstRun={first} data={sampleExploreData} defaultLabel="Sample pin"
-        settings={settings} onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} online onGoOnline={() => {}} />
+        settings={settings} onChange={async (s) => { setSettings(s); return true; }} lookup={sampleLookup} autocomplete={sampleAutocomplete} online onGoOnline={() => {}} />
     </Frame>
   );
 }

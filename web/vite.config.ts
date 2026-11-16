@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { DEFAULT_SETTINGS, SETTINGS_URL, validSettings } from './src/settings/settings';
+import { DEFAULT_SETTINGS, MA_BOUNDS, SETTINGS_URL, validSettings } from './src/settings/settings';
 
 // ---------------------------------------------------------------------------------------
 // Google Places proxy (dev + preview only).
@@ -17,6 +17,8 @@ import { DEFAULT_SETTINGS, SETTINGS_URL, validSettings } from './src/settings/se
 // Field masks are fixed here, per route, so the client cannot widen what is billed:
 //   POST /google/places/places:searchText  -> places.googleapis.com/v1/places:searchText
 //   GET  /google/places/places/<id>        -> places.googleapis.com/v1/places/<id>
+//   POST /google/places/places:autocomplete -> v1/places:autocomplete (address suggestions, MA only)
+//   GET  /google/places/address/<place id>?sessionToken=… -> v1/places/<id>, location + address only
 //   GET  /google/photo/<photo name>?maxWidthPx=N -> v1/<photo name>/media (bytes streamed back)
 //   GET  /google/streetview?location=lat,lon&size=WxH  -> Street View Static image
 //   GET  /google/streetview/metadata?location=lat,lon  -> Street View metadata (free)
@@ -31,6 +33,12 @@ const PLACE_FIELDS = [
 ];
 const SEARCH_FIELD_MASK = PLACE_FIELDS.map((f) => `places.${f}`).join(',');
 const DETAILS_FIELD_MASK = PLACE_FIELDS.join(',');
+
+/** Address autocomplete: suggestions, then one Essentials-tier details call to end the session. */
+const SUGGEST_FIELD_MASK = 'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.structuredFormat';
+const ADDRESS_FIELD_MASK = 'id,formattedAddress,location';
+const SESSION_TOKEN = /^[A-Za-z0-9_-]{8,64}$/;
+const BARE_PLACE_ID = /^[A-Za-z0-9_-]{8,300}$/;
 
 const PLACES_BASE = 'https://places.googleapis.com/v1';
 const STREETVIEW_BASE = 'https://maps.googleapis.com/maps/api/streetview';
@@ -122,6 +130,35 @@ function googleProxy(apiKey: string): Plugin {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': SEARCH_FIELD_MASK },
             body: JSON.stringify(clean),
+          });
+          return await relay(res, upstream);
+        }
+        if (rest === 'places:autocomplete' && req.method === 'POST') {
+          // Only the typed text and the session token come from the browser; the area is fixed
+          // to Massachusetts here, where the local data is.
+          const body = JSON.parse((await readBody(req)) || '{}') as Record<string, unknown>;
+          const input = typeof body.input === 'string' ? body.input.trim().slice(0, 200) : '';
+          const token = typeof body.sessionToken === 'string' && SESSION_TOKEN.test(body.sessionToken) ? body.sessionToken : null;
+          if (input.length < 3 || !token) return sendJson(res, 400, { error: 'bad_request', detail: 'input (3+ chars) and sessionToken are required' });
+          const upstream = await fetch(`${PLACES_BASE}/places:autocomplete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': SUGGEST_FIELD_MASK },
+            body: JSON.stringify({
+              input, sessionToken: token, languageCode: 'en', includedRegionCodes: ['us'],
+              locationRestriction: { rectangle: {
+                low: { latitude: MA_BOUNDS.south, longitude: MA_BOUNDS.west },
+                high: { latitude: MA_BOUNDS.north, longitude: MA_BOUNDS.east },
+              } },
+            }),
+          });
+          return await relay(res, upstream);
+        }
+        if (rest.startsWith('address/') && req.method === 'GET') {
+          const id = rest.slice('address/'.length);
+          const token = url.searchParams.get('sessionToken');
+          if (!BARE_PLACE_ID.test(id) || !token || !SESSION_TOKEN.test(token)) return sendJson(res, 400, { error: 'bad_request' });
+          const upstream = await fetch(`${PLACES_BASE}/places/${id}?sessionToken=${token}`, {
+            headers: { 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': ADDRESS_FIELD_MASK },
           });
           return await relay(res, upstream);
         }

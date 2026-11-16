@@ -82,6 +82,12 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   (`src/settings/LocationDialog.tsx`; lookup shared with Settings via `PlaceSearch.tsx`). With
   no place saved, the dialog opens once at start; "Keep the default pin for now" is remembered
   in this browser's localStorage (`ma-scratch:location-prompt`). Off in the public demo.
+- Address suggestions (online only): Places Autocomplete (New) through the proxy
+  (`/google/places/places:autocomplete`, restricted to MA bounds server-side), 300 ms after
+  typing stops, 3+ characters. A pick ends the session with one Essentials-tier details call
+  (`/google/places/address/<id>`, mask `id,formattedAddress,location`), so a picked session's
+  suggestions are not billed per request. Enter on a highlighted suggestion picks it and must
+  not also run Look up (Text Search). The input is never logged or stored.
 - A saved address is personal: never in a URL, a commit, a fixture or the public demo. The
   summary there (`src/settings/around.ts`) counts claims at stores within the radius, so it
   can differ from the map header's tract-based count; say so, never blend the two.
