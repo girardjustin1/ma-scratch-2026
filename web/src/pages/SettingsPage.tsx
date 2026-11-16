@@ -1,26 +1,20 @@
 import { useMemo, useState } from 'react';
-import { MarkerPin01, SearchLg, Trash01 } from '@untitledui/icons';
+import { MarkerPin01, Trash01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { ButtonGroup, ButtonGroupItem } from '@/components/base/button-group/button-group';
-import { Input } from '@/components/base/input/input';
 import { cx } from '@/utils/cx';
 import { Card, CaveatNote, Stat } from '../components/Basics';
 import type { ExploreData } from './ExplorePage';
-import type { AddressMatch, LookupResult } from '../data/geocode';
-import { storesWithin, summarizeAround } from '../settings/around';
+import type { LookupResult } from '../data/geocode';
+import { summarizeAround } from '../settings/around';
+import { PlaceSearch } from '../settings/PlaceSearch';
 import {
-  activePlace, DEFAULT_SETTINGS, MAX_PLACES, RADIUS_CHOICES, type LocalSettings, type SavedPlace,
+  activePlace, DEFAULT_SETTINGS, RADIUS_CHOICES, type LocalSettings, type SavedPlace,
 } from '../settings/settings';
 import { fmtDate, fmtInt, fmtRange, fmtUsd } from '../lib/format';
 
-const SELECTED = 'selected:bg-tertiary selected:text-primary';
-
-const LOOKUP_ERRORS: Record<Exclude<LookupResult, { ok: true }>['kind'], string> = {
-  no_key: 'Address lookup needs GOOGLE_MAPS_API_KEY in web/.env.local.',
-  offline: 'Could not reach Google. Check the connection and try again.',
-  http: 'Google returned an error. Try again, or check the address.',
-};
+export const SELECTED = 'selected:bg-tertiary selected:text-primary';
 
 /**
  * Settings: saved places. Look up an address (Google, through the local proxy), save it, and
@@ -57,25 +51,8 @@ export function SettingsPage({
   const center: [number, number] = active ? [active.lon, active.lat] : defaultCenter;
   const sum = useMemo(() => summarizeAround(data, center, s.radiusMiles), [data, center[0], center[1], s.radiusMiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [query, setQuery] = useState('');
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<LookupResult | null>(null);
   const canSave = !!settings && !!onChange;
-  const full = s.places.length >= MAX_PLACES;
-
-  const runLookup = async () => {
-    if (!lookup || !query.trim()) return;
-    if (!online) onGoOnline?.();
-    setBusy(true);
-    setResult(await lookup(query));
-    setBusy(false);
-  };
-  const savePlace = (m: AddressMatch) => {
-    const place: SavedPlace = { id: `p-${Date.now().toString(36)}`, label: name.trim() || m.label, address: m.address, lon: m.lon, lat: m.lat };
-    void update({ ...s, places: [...s.places, place], activeId: place.id });
-    setResult(null); setQuery(''); setName('');
-  };
+  const savePlace = (place: SavedPlace) => void update({ ...s, places: [...s.places, place], activeId: place.id });
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -144,41 +121,8 @@ export function SettingsPage({
               <h2 className="text-md font-semibold text-primary">Add a place</h2>
               <p className="text-sm text-tertiary">Any address or place in Massachusetts.</p>
             </div>
-            <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); void runLookup(); }}>
-              <Input size="sm" icon={SearchLg} aria-label="Address" placeholder="Street address, town" value={query} onChange={setQuery}
-                isDisabled={!lookup || !canSave} />
-              <Input size="sm" aria-label="Name (optional)" placeholder="Name (optional), e.g. Home" value={name} onChange={setName}
-                isDisabled={!lookup || !canSave} />
-              <div className="flex items-center gap-2">
-                <Button size="sm" color="secondary" type="submit" isLoading={busy} isDisabled={!lookup || !canSave || !query.trim() || full}>
-                  {online ? 'Look up' : 'Go online and look up'}
-                </Button>
-                {full && <span className="text-xs text-tertiary">{MAX_PLACES} places saved; remove one first.</span>}
-              </div>
-            </form>
-            {!lookup || !canSave ? (
-              <p className="text-xs text-tertiary">
-                {demo ? 'Address lookup is off in the public demo.' : 'Saving places needs the local app (npm run dev).'}
-              </p>
-            ) : (
-              <p className="text-xs text-tertiary">Look up sends what you type to Google, once. Nothing else leaves this computer.</p>
-            )}
-            {result && !result.ok && <p className="text-sm text-error-primary">{LOOKUP_ERRORS[result.kind]}</p>}
-            {result?.ok && result.matches.length === 0 && <p className="text-sm text-tertiary">No match in Massachusetts. Try adding the town.</p>}
-            {result?.ok && result.matches.length > 0 && (
-              <ul aria-label="Matches" className="flex flex-col divide-y divide-secondary rounded-lg border border-secondary">
-                {result.matches.map((m) => (
-                  <li key={`${m.lon},${m.lat}`} className="flex items-center gap-3 px-3 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-primary">{m.label}</p>
-                      <p className="truncate text-xs text-tertiary">{m.address}</p>
-                      <p className="text-xs text-tertiary tabular">{fmtInt(storesWithin(data, [m.lon, m.lat], s.radiusMiles).length)} licensed stores within {s.radiusMiles} mi</p>
-                    </div>
-                    <Button size="sm" color="secondary" onClick={() => savePlace(m)}>Save and use</Button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <PlaceSearch data={data} radiusMiles={s.radiusMiles} lookup={canSave ? lookup : undefined} online={online} onGoOnline={onGoOnline}
+              onSave={canSave ? savePlace : undefined} placeCount={s.places.length} demo={demo} />
           </Card>
 
           <Card className="flex flex-col gap-3 p-5">
@@ -203,7 +147,7 @@ export function SettingsPage({
   );
 }
 
-function PlaceRow({ label, address, active, onUse, onRemove }: {
+export function PlaceRow({ label, address, active, onUse, onRemove }: {
   label: string; address: string; active: boolean; onUse: () => void; onRemove?: () => void;
 }) {
   return (

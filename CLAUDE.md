@@ -78,6 +78,10 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   `/local-settings` endpoint (vite.config.ts). `src/settings/settings.ts` validates it.
 - The active place replaces the default pin: the map's center and radius, and the area new
   reports describe (`scripts/publish-reports.ts` reads the file). Published issues keep theirs.
+- The map header has a location button (active place · radius) that opens the location dialog
+  (`src/settings/LocationDialog.tsx`; lookup shared with Settings via `PlaceSearch.tsx`). With
+  no place saved, the dialog opens once at start; "Keep the default pin for now" is remembered
+  in this browser's localStorage (`ma-scratch:location-prompt`). Off in the public demo.
 - A saved address is personal: never in a URL, a commit, a fixture or the public demo. The
   summary there (`src/settings/around.ts`) counts claims at stores within the radius, so it
   can differ from the map header's tract-based count; say so, never blend the two.

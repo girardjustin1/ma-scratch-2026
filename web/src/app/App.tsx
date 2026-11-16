@@ -10,6 +10,7 @@ import { SettingsPage } from '../pages/SettingsPage';
 import { lookupAddress } from '../data/geocode';
 import { loadSettings, saveSettings } from '../settings/localSettings';
 import { activePlace, type LocalSettings } from '../settings/settings';
+import { LocationButton, LocationDialog, locationPromptDismissed } from '../settings/LocationDialog';
 import { useReports } from '../reports/useReports';
 import type { ExploreData } from '../pages/ExplorePage';
 import type { Filters } from '../domain/types';
@@ -84,6 +85,15 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
     if (routed && t !== tab) window.history.pushState(null, '', href(TAB_PATHS[t]));
     setTabState(t);
   };
+  // Location dialog: from the map's location button, or once at start when no place is saved.
+  const [locOpen, setLocOpen] = useState(false);
+  const [firstRun, setFirstRun] = useState(false);
+  useEffect(() => {
+    if (!loaded || !settings || demo || settings.places.length > 0 || locationPromptDismissed() || tab === 'settings') return;
+    setFirstRun(true);
+    setLocOpen(true);
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps -- once, when the local data has loaded
+  const openLocation = () => { setFirstRun(false); setLocOpen(true); };
   const [mode, setMode] = useState<'light' | 'dark'>(initialMode);
   const [online, setOnline] = useState(false);
   const [mapGame, setMapGame] = useState<string | null>(null);
@@ -99,7 +109,8 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {!loaded && <p className="p-6 text-sm text-tertiary">Loading the local data…</p>}
         {loaded && <>
         {tab === 'map' && (
-          <ExplorePage key={view ? `local-${place?.id ?? 'pin'}-${radiusMiles}` : (mapGame ?? 'all')} data={view ?? sampleExploreData} initialFilters={filters} online={online} />
+          <ExplorePage key={view ? `local-${place?.id ?? 'pin'}-${radiusMiles}` : (mapGame ?? 'all')} data={view ?? sampleExploreData} initialFilters={filters} online={online}
+            locationSlot={view && settings ? <LocationButton settings={settings} defaultLabel="Default pin" onPress={openLocation} /> : undefined} />
         )}
         {tab === 'games' && (local?.ev
           ? <GamesPage games={local.ev.games} tiers={local.ev.tiers} claims={local.claims} coverage={local.coverage} asOf={local.ev.asOf}
@@ -125,6 +136,10 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {tab === 'reports' && <ReportsPage index={reports.index} seen={reports.seen} loadIssue={demo ? loadDemoIssue : undefined} />}
         </>}
         </Fragment>
+        {local && settings && (
+          <LocationDialog isOpen={locOpen} onOpenChange={setLocOpen} firstRun={firstRun} data={local} defaultLabel="Default pin"
+            settings={settings} onChange={changeSettings} lookup={demo ? undefined : lookupAddress} online={online} onGoOnline={() => setOnline(true)} />
+        )}
       </AppShell>
     </ModeProvider>
     </RoutingContext.Provider>
