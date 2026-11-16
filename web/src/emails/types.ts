@@ -62,6 +62,8 @@ export interface InsightsData extends EmailBase {
   /** Top 3% of stores in the area by listed claims over `period`. */
   hottest: { min: number; period: string; stores: (StoreRef & { claims: number })[] };
   largest: ListedClaimRow[];
+  /** Weekly: every listed claim in the area that week, newest listed date first. */
+  winners?: ListedClaimRow[];
   /** Monthly: games with the most listed claims in the area over the month. */
   topGames?: { name: string; gameId?: string; price: number | null; image?: string; claims: number; prizeTotal: number }[];
   /** Short analysis notes: one finding each, with the numbers behind it. */

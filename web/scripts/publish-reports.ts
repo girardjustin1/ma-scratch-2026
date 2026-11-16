@@ -5,7 +5,11 @@
  * Idempotent: an issue that exists is never rebuilt, so published issues stay as they were.
  * The first run backfills (reports/reports.ts BACKFILL); those issues are marked backfilled
  * and never show as unread. Nothing is sent anywhere.
+ *
+ * When a new weekly issue is published (Mondays), a macOS notification says so. It is shown by
+ * this Mac only; --no-notify or MA_SCRATCH_NO_NOTIFY=1 turns it off.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -83,6 +87,19 @@ const by = published.reduce<Record<string, number>>((acc, m) => ({ ...acc, [m.ty
 console.log(`reports: data through ${data.coverage.dateTo}${place ? ' (active saved place)' : ''}; published ${published.length}`
   + (published.length ? ` (${Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', ')})` : '')
   + `; ${index.issues.length + published.length} in archive${firstRun && published.length ? ' (first run: backfilled)' : ''}`);
+// A local macOS notification for the new weekly issue. Never fails the run.
+const weekly = published.find((m) => m.type === 'weekly' && !m.backfilled);
+const notify = process.platform === 'darwin' && !process.argv.includes('--no-notify') && process.env.MA_SCRATCH_NO_NOTIFY !== '1';
+if (weekly && notify) {
+  try {
+    // Text goes in as arguments, never into the script source.
+    execFileSync('osascript', ['-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv)', '-e', 'end run',
+      'MA scratch: new weekly winners', `${weekly.subject}. Open Reports at ${APP_URL}/reports`], { stdio: 'ignore', timeout: 10_000 });
+    console.log(`reports: notified (${weekly.id})`);
+  } catch (e) {
+    console.log(`reports: notification not shown (${(e as Error).message})`);
+  }
+}
 if (failed.length) {
   console.error(`reports: ${failed.length} failed\n  ${failed.join('\n  ')}`);
   process.exit(1);

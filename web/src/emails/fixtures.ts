@@ -44,6 +44,15 @@ export const weekly: InsightsData = {
     { listedDate: '2026-11-03', game: 'Cash Orchard', price: 5, prize: 10000, store: 'Test Liquors 4', town: 'Chelsea', image: art('CASH ORCHARD') },
     { listedDate: '2026-11-04', game: 'Harbor Riches', price: 20, prize: 5000, store: 'Sample Smoke Shop 2', town: 'Everett' },
   ],
+  winners: [
+    { listedDate: '2026-11-08', game: 'Cash Orchard', price: 5, prize: 1000, store: 'Demo Variety 9', town: 'Somerville' },
+    { listedDate: '2026-11-07', game: 'Harbor Riches', price: 20, prize: 2500, store: 'Test Market 22', town: 'Malden' },
+    { listedDate: '2026-11-07', game: 'Granite Gold', price: 10, prize: 600, store: 'Demo News 18', town: 'Medford' },
+    { listedDate: '2026-11-06', game: 'Granite Gold', price: 10, prize: 20000, store: 'Demo Market 7', town: 'Revere' },
+    { listedDate: '2026-11-05', game: 'Maple Millions', price: 30, prize: 100000, store: 'Sample Variety 12', town: 'Everett' },
+    { listedDate: '2026-11-04', game: 'Harbor Riches', price: 20, prize: 5000, store: 'Sample Smoke Shop 2', town: 'Everett' },
+    { listedDate: '2026-11-03', game: 'Cash Orchard', price: 5, prize: 10000, store: 'Test Liquors 4', town: 'Chelsea' },
+  ],
   featured: [],
   ev: undefined,
   analysis: [
@@ -62,6 +71,11 @@ export const weeklyQuiet: InsightsData = {
   hottest: { min: 0, period: 'the last 12 months', stores: [] },
   largest: [
     { listedDate: '2026-11-06', game: 'Cash Orchard', price: null, prize: 1000, store: 'Demo Market 7', town: 'Revere' },
+  ],
+  winners: [
+    { listedDate: '2026-11-07', game: 'Granite Gold', price: 10, prize: 1000, store: 'Test Liquors 4', town: 'Chelsea' },
+    { listedDate: '2026-11-06', game: 'Cash Orchard', price: null, prize: 1000, store: 'Demo Market 7', town: 'Revere' },
+    { listedDate: '2026-11-03', game: 'Harbor Riches', price: 20, prize: 1000, store: 'Demo News 18', town: 'Medford' },
   ],
   analysis: [],
   featured: [],

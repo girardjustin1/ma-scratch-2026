@@ -61,8 +61,11 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   issue is never rebuilt. Weekly Mon–Sun on Mondays, monthly on the 1st, featured and +EV
   weekly only with a prize table saved after the week, nearby daily when claims are listed
   within 1 mi. First run backfills (marked, never unread).
-- Notification is in-app only: unread count on the Reports tab and "new" markers, kept in this
-  browser's localStorage. No system notifications.
+- Notification: unread count on the Reports tab and "new" markers (this browser's localStorage),
+  plus one local macOS notification when a new weekly issue publishes (Mondays; owner asked for
+  a Monday check of new winners, 2026-11-16). Text goes to osascript as arguments; it never
+  fails the job; `--no-notify` or `MA_SCRATCH_NO_NOTIFY=1` turns it off. Nothing is emailed.
+- Weekly issues list every listed claim in the area that week (`winners`), newest first.
 - Honesty rules as in the app: every +EV estimate above 100% carries "Check inputs" and a
   reason, never "a sure thing"; the area is "your pin", never the address.
 - Stories use SYNTHETIC `emails/fixtures.ts` and `fixtures/sampleReports.ts`.

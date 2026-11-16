@@ -468,6 +468,11 @@ export function buildInsights(data: ExploreData, opts: InsightsOptions): Insight
     trend,
     hottest: hottest(a, yearArea),
     largest,
+    winners: opts.period === 'week'
+      ? [...periodClaims]
+        .sort((x, y) => y.listedDate.localeCompare(x.listedDate) || y.prizeAmount - x.prizeAmount)
+        .map((c) => claimRow(a, c))
+      : undefined,
     topGames,
     analysis: analysisNotes(a, opts.period, p, prior, periodClaims, priorClaims, yearAll, yearArea),
     featured: pickFeatured(a, FEATURED_COUNT[opts.period], p.to),
