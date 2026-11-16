@@ -30,9 +30,26 @@ Spec: `docs/PRD.md`. Source research: `docs/research/`.
   Charts are grey. Status is icon + words, never color.
 - Light/dark: `useMode()` from `web/src/theme/mode.tsx`; dark mode is `.dark-mode` on `<html>`.
 
+## Map page controls
+
+- Header = **what data**: one row of filter buttons (`FilterBar` in `components/Controls.tsx`):
+  location, radius, listed dates, games, prize size, stores by listed claims. Each button shows
+  its value and opens a panel. A filter off its default gets a dark outline; Reset shows only
+  then. A summary line (count, covered tracts, coverage) sits under the row.
+- On the map = **how it is drawn** (`MapToolbar`): metric dropdown, basemap, Layers panel
+  (tracts/hexagons, fills, bubbles), side by side. It passes clicks through between controls.
+- Filter rules live in `domain/filterState.ts`: limits, what counts as changed, and deep-link
+  params (`from to games prices prize radius stores`). A bad or out-of-range param falls back
+  for that filter alone. The pin is never written to a link.
+- Basemap: Outline (our layers, offline) | Streets | Satellite (`map/mapStyle.ts`, Mapbox Static
+  Tiles as raster, online + token only; picking one offline takes the app online). The choice
+  is kept in this browser's localStorage (`ma-scratch:basemap`). Area fill defaults per
+  basemap (`DEFAULT_FILL_OPACITY`) unless changed by hand. Basemap imagery is the one other
+  place color appears; the GUI stays monochrome. No other tile hosts.
+
 ## Hexagon layer
 
-- Layers → Tracts | Hexagons. `web/src/domain/hexes.ts` sums the filtered listed claims of the
+- Layers panel → Tracts | Hexagons. `web/src/domain/hexes.ts` sums the filtered listed claims of the
   stores in each H3 cell (res 6/7/8 by zoom), in the browser, from the same claims as the bubbles.
 - Hexagons are listed claims only: picking them sets the metric to claims and disables the
   census metrics; switching back restores the previous metric. Cells with no stores are blank.

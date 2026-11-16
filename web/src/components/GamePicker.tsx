@@ -14,12 +14,15 @@ import { Select } from '@/components/base/select/select';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { cx } from '@/utils/cx';
 import type { GameRef, PrizeBand } from '../domain/types';
+import { UNKNOWN_PRICE } from '../domain/filterState';
 import { BUCKETS, bucketForBand, type BucketId } from '../domain/prizeBuckets';
 import { PaceBadge } from './GamePace';
 import { CAVEATS } from '../lib/copy';
 import { fmtCompactUsd, fmtDate, fmtInt } from '../lib/format';
 import { CaveatNote } from './Basics';
 import { Chip } from './Chip';
+
+export { UNKNOWN_PRICE };
 
 export type GameSort = 'unclaimed' | 'payback' | 'top' | 'claims' | 'newest' | 'name';
 
@@ -110,8 +113,6 @@ const SORTS: { value: GameSort; label: string }[] = [
   { value: 'name', label: 'Name' },
 ];
 
-/** Price filter value for games the catalog has no price for (matches filterClaims). */
-export const UNKNOWN_PRICE = -1;
 const nameKey = (n: string) => n.replace(/^[$\d,.\s]+/, '').trim() || n;
 
 /** Prizes left in a bucket; the top-prize bucket falls back to the catalog summary. */
@@ -296,13 +297,17 @@ export interface GamePickerProps {
   prizeBand?: PrizeBand;
   /** Listed claims per game inside the radius, under the current date and prize filters. */
   claimCounts: Map<string, number>;
+  /** Toolbar form: no label above, a ticket icon, and a width that follows the text. */
+  compact?: boolean;
+  /** Reads darker when the game or price filter is off its default (toolbar form). */
+  active?: boolean;
 }
 
 /**
  * Game filter for the map: search, on-sale toggle, sort, and grouping by ticket price.
  * Unclaimed-prize counts are statewide and never imply what any store holds.
  */
-export function GamePicker({ games, value, onChange, prices, onPricesChange, claimCounts, prizeBand = 'all' }: GamePickerProps) {
+export function GamePicker({ games, value, onChange, prices, onPricesChange, claimCounts, prizeBand = 'all', compact = false, active = false }: GamePickerProps) {
   const labelId = useId();
   const [query, setQuery] = useState('');
   const hasSaleInfo = games.some((g) => g.onSale !== undefined);
@@ -353,16 +358,20 @@ export function GamePicker({ games, value, onChange, prices, onPricesChange, cla
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span id={labelId} className="text-sm font-medium text-secondary">Game</span>
+      <span id={labelId} className={cx('text-sm font-medium text-secondary', compact && 'sr-only')}>Game</span>
       <AriaDialogTrigger>
         <AriaButton
           aria-labelledby={labelId} aria-haspopup="dialog"
-          className={({ isFocusVisible, isPressed }) => cx(
-            'relative flex w-[220px] cursor-pointer items-center gap-2 rounded-lg bg-primary py-2 pr-2.5 pl-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset',
+          className={({ isFocusVisible, isPressed, isHovered }) => cx(
+            'relative flex cursor-pointer items-center gap-2 rounded-lg bg-primary py-2 pr-2.5 pl-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset',
+            compact ? 'max-w-[240px] gap-1.5 text-secondary' : 'w-[220px]',
+            compact && isHovered && 'bg-primary_hover',
+            compact && active && 'bg-secondary ring-[1.5px] ring-[var(--color-fg-primary)]',
             (isFocusVisible || isPressed) && 'ring-2 ring-brand',
           )}
         >
-          <span className="flex-1 truncate text-sm font-medium text-primary">{display}</span>
+          {compact && <Ticket01 aria-hidden className="size-5 shrink-0 text-fg-quaternary" />}
+          <span className={cx('flex-1 truncate text-sm text-primary', compact ? 'font-semibold' : 'font-medium', compact && !active && 'text-secondary')}>{display}</span>
           <ChevronDown aria-hidden className="size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />
         </AriaButton>
         <AriaPopover

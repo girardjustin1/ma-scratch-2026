@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Columns03 } from '@untitledui/icons';
-import { Button } from '@/components/base/buttons/button';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ViewState } from '@vis.gl/react-maplibre';
 import { distance, point } from '@turf/turf';
 import { claimCountBreaks, classOf, quantileBreaks, storeCountBreaks } from '../domain/classify';
@@ -11,9 +9,10 @@ import type {
 import { ClaimsMap, type MapSelection } from '../map/ClaimsMap';
 import type { EvData } from '../data/localView';
 import type { PaceData } from '../domain/pace';
-import type { Basemap } from '../map/mapStyle';
+import { DEFAULT_FILL_OPACITY, isBasemap, type Basemap } from '../map/mapStyle';
 import { CoverageChip } from '../components/Basics';
-import { FilterBar, LayerControls, MetricSwitcher, STORE_CLAIMS_MAX } from '../components/Controls';
+import { FilterBar, MapToolbar, MetricSelect } from '../components/Controls';
+import { filterParams, filtersFromParams, STORE_CLAIMS_MAX } from '../domain/filterState';
 import { MapLegend, type StoreInView, type StoreKeyControls } from '../components/MapLegend';
 import { DetailPanel, type PanelContext } from '../components/DetailDrawer';
 import { Playback, WINDOW_DAYS, type PlayMode } from '../components/Playback';
@@ -48,6 +47,9 @@ export interface ExplorePageProps {
   initialCompare?: boolean;
   initialSelected?: string;
   online?: boolean;
+  /** Lets a streets or satellite pick take the app online. Absent = those need `online` already. */
+  onGoOnline?: () => void;
+  /** Default: the basemap last picked in this browser (routed app), else outline. */
   initialBasemap?: Basemap;
   /** Start with the map filled by hexagons instead of tracts. */
   initialArea?: AreaShape;
@@ -56,24 +58,12 @@ export interface ExplorePageProps {
 }
 
 const METRICS: MetricKey[] = ['claims', 'income', 'perRetailer'];
-const BANDS: Filters['prizeBand'][] = ['all', '600-999', '1k-9k', '10k-99k', '100k+'];
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const list = (v: string | null) => (v ? v.split(',').filter(Boolean) : null);
 
-/** Deep link → filters, falling back to the page's defaults for anything missing or invalid. */
-function filtersFromUrl(base: Filters): Filters {
-  const from = readParam('from'), to = readParam('to'), prize = readParam('prize'), radius = Number(readParam('radius'));
-  const prices = list(readParam('prices'))?.map(Number).filter((n) => Number.isFinite(n) && n > 0);
-  return {
-    ...base,
-    dateFrom: from && ISO.test(from) ? from : base.dateFrom,
-    dateTo: to && ISO.test(to) ? to : base.dateTo,
-    gameIds: list(readParam('games')) ?? base.gameIds,
-    prices: prices?.length ? prices : base.prices,
-    prizeBand: BANDS.includes(prize as Filters['prizeBand']) ? (prize as Filters['prizeBand']) : base.prizeBand,
-    radiusMiles: radius > 0 && radius <= 50 ? radius : base.radiusMiles,
-  };
-}
+/** The basemap last picked, remembered in this browser only. */
+const BASEMAP_KEY = 'ma-scratch:basemap';
+const storedBasemap = (): Basemap => {
+  try { const v = localStorage.getItem(BASEMAP_KEY); return isBasemap(v) ? v : 'outline'; } catch { return 'outline'; }
+};
 
 /** First index with ds[i] > d (ds sorted ascending ISO dates). */
 function upperBound(ds: string[], d: string) {
@@ -141,7 +131,7 @@ function useLayer(data: ExploreData, filters: Filters, metric: MetricKey) {
 }
 
 export function ExplorePage({
-  data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, initialBasemap = 'outline',
+  data, initialFilters, initialMetric = 'income', initialCompare = false, initialSelected, online = false, onGoOnline, initialBasemap,
   initialArea = 'tracts', locationSlot,
 }: ExplorePageProps) {
   const routed = useRouted();
@@ -151,7 +141,9 @@ export function ExplorePage({
   if (urlMetric && METRICS.includes(urlMetric)) initialMetric = urlMetric;
   if (routed && readParam('compare') === '1') initialCompare = true;
   if (routed && readParam('tract')) initialSelected = readParam('tract')!;
-  const [filters, setFilters] = useState(() => (routed ? filtersFromUrl(initialFilters) : initialFilters));
+  const [filters, setFilters] = useState(() => (routed
+    ? filtersFromParams(readParam, initialFilters, { minDate: data.coverage.dateFrom, maxDate: data.coverage.dateTo, games: data.games })
+    : initialFilters));
   const [metric, setMetric] = useState<MetricKey>(initialArea === 'hexes' ? 'claims' : initialMetric);
   // The metric to restore when hexagons (claims only) are switched back to tracts.
   const [metricBeforeHexes, setMetricBeforeHexes] = useState<MetricKey>(initialMetric);
@@ -167,12 +159,39 @@ export function ExplorePage({
   const [hiddenClasses, setHiddenClasses] = useState<Set<number>>(new Set());
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab | null>(initialSelected && !routed ? 'claims' : null);
-  const [layers, setLayers] = useState({ areaShape: initialArea, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: initialBasemap });
+  const [layers, setLayers] = useState(() => {
+    const basemap = initialBasemap ?? (routed ? storedBasemap() : 'outline');
+    // The fill starts lighter over streets or imagery, but only if that basemap can show now.
+    return { areaShape: initialArea, tractOpacity: DEFAULT_FILL_OPACITY[online ? basemap : 'outline'], bubbleOpacity: 0.9, showBubbles: true, basemap };
+  });
+  const setBasemap = (basemap: Basemap) => {
+    if (routed) try { localStorage.setItem(BASEMAP_KEY, basemap); } catch { /* private mode */ }
+    setLayers((l) => ({ ...l, basemap }));
+  };
+  // Streets and satellite only show while online. Whenever the basemap on screen changes, the
+  // area fill moves to that basemap's default, unless the fill was changed by hand.
+  const shownBasemap: Basemap = online ? layers.basemap : 'outline';
+  const lastShown = useRef(shownBasemap);
+  useEffect(() => {
+    const before = lastShown.current;
+    if (before === shownBasemap) return;
+    lastShown.current = shownBasemap;
+    setLayers((l) => (l.tractOpacity === DEFAULT_FILL_OPACITY[before] ? { ...l, tractOpacity: DEFAULT_FILL_OPACITY[shownBasemap] } : l));
+  }, [shownBasemap]);
   const [view, setView] = useState<Partial<ViewState>>({
     // 10.4 frames the default 5 mi radius; each halving of the radius zooms in one step.
     longitude: data.coverage.center[0], latitude: data.coverage.center[1],
     zoom: Math.min(14, Math.max(8, 10.4 + Math.log2(5 / filters.radiusMiles))),
   });
+
+  // A new radius (or a moved pin) re-frames the map on it; panning and zooming in between are kept.
+  const framed = useRef(`${filters.pin.join()}|${filters.radiusMiles}`);
+  useEffect(() => {
+    const key = `${filters.pin.join()}|${filters.radiusMiles}`;
+    if (key === framed.current) return;
+    framed.current = key;
+    setView((v) => ({ ...v, longitude: filters.pin[0], latitude: filters.pin[1], zoom: Math.min(14, Math.max(8, 10.4 + Math.log2(5 / filters.radiusMiles))) }));
+  }, [filters.pin, filters.radiusMiles]);
 
   // Playback: the map shows listed claims up to playDate (Grow) or the 30 days to it, while
   // class breaks and bubble sizes keep the full range's scale so growth is visible.
@@ -335,17 +354,11 @@ export function ExplorePage({
   // Mirror the view to the URL, leaving defaults out.
   useEffect(() => {
     if (!routed) return;
-    const same = (x: unknown[], y: unknown[]) => x.join() === y.join();
     writeParams({
       metric: metric === 'income' && layers.areaShape === 'tracts' ? null : layers.areaShape === 'hexes' ? null : metric,
       area: layers.areaShape === 'hexes' ? 'hexes' : null,
       compare: compare ? '1' : null,
-      from: filters.dateFrom === initialFilters.dateFrom ? null : filters.dateFrom,
-      to: filters.dateTo === initialFilters.dateTo ? null : filters.dateTo,
-      games: same(filters.gameIds, initialFilters.gameIds) ? null : filters.gameIds.join(','),
-      prices: same(filters.prices, initialFilters.prices) ? null : filters.prices.join(','),
-      prize: filters.prizeBand === initialFilters.prizeBand ? null : filters.prizeBand,
-      radius: filters.radiusMiles === initialFilters.radiusMiles ? null : String(filters.radiusMiles),
+      ...filterParams(filters, initialFilters),
       store: selection?.kind === 'store' ? selection.id : null,
       tract: selection?.kind === 'tract' ? selection.geoid : null,
     });
@@ -354,7 +367,7 @@ export function ExplorePage({
   const mapProps = {
     tracts: data.tracts, retailers: data.retailers, coverage: data.coverage,
     pin: filters.pin, radiusMiles: filters.radiusMiles, ...layers,
-    basemap: online ? layers.basemap : ('outline' as const),
+    basemap: shownBasemap,
     onPinChange: (pin: [number, number]) => setFilters({ ...filters, pin }),
     selection,
     storeRange: filters.storeClaims,
@@ -371,35 +384,32 @@ export function ExplorePage({
     setLayers({ ...layers, areaShape });
   };
 
-  // Controls sit top-left, the legend bottom-right; each scrolls on its own so neither is
-  // clipped or overlaps the other on short windows.
-  const controlsBox = 'absolute top-3 left-3 max-h-[calc(100%-2.5rem)] overflow-y-auto';
+  // The view toolbar runs along the top (left of the zoom buttons) and lets clicks through
+  // between its controls; the legend sits bottom-right and scrolls on its own.
+  const controlsBox = 'pointer-events-none absolute top-3 left-3 right-14 *:pointer-events-auto';
   const legendBox = 'absolute right-3 bottom-7 max-h-[calc(100%-5.5rem)] overflow-y-auto rounded-xl';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-col gap-3 border-b border-secondary bg-primary px-6 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {locationSlot}
-          <MetricSwitcher value={metric} onChange={setMetric} claimsOnly={layers.areaShape === 'hexes'} />
-          <Button size="sm" color={compare ? 'primary' : 'secondary'} iconLeading={Columns03} onClick={() => setCompare(!compare)}
-            aria-pressed={compare}>
-            Side by side
-          </Button>
-          <div className="flex-1" />
-          <CoverageChip coverage={data.coverage} />
-          <p className="text-xs text-tertiary tabular">
-            {fmtInt(playInRadius ?? a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius{playDate ? ` through ${fmtDate(playDate)}` : ''} · {fmtInt(covered)} covered tracts
-          </p>
-        </div>
+      <div className="border-b border-secondary bg-primary px-6 py-2.5">
         <FilterBar
-          filters={filters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
+          filters={filters} defaults={initialFilters} games={data.games} minDate={data.coverage.dateFrom} maxDate={data.coverage.dateTo}
           claimCounts={a.claimCounts} onChange={setFilters} onReset={() => setFilters(initialFilters)}
+          locationSlot={locationSlot}
+          summary={
+            <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-tertiary tabular">
+              <span className="font-medium text-secondary">
+                {fmtInt(playInRadius ?? a.claimsInRadius)} {LABELS.listedClaims.toLowerCase()} in radius{playDate ? ` through ${fmtDate(playDate)}` : ''}
+              </span>
+              <span aria-hidden>·</span>{fmtInt(covered)} covered tracts
+              <span aria-hidden>·</span><CoverageChip coverage={data.coverage} plain />
+            </p>
+          }
         />
       </div>
       <div className="flex min-h-0 flex-1">
       <div className="grid min-h-0 min-w-0 flex-1 gap-0.5 bg-[var(--color-border-secondary)]" style={{ gridTemplateColumns: compare ? '1fr 1fr' : '1fr' }}>
-        <div className="relative min-h-0">
+        <div className="@container relative min-h-0">
           <ClaimsMap {...mapProps} metric={metric} metrics={a.metrics} breaks={a.breaks} claimsByRetailer={storeCounts} playing={playing}
             storesInRadius={a.storesInRadius} bubbleBreaks={a.bubbleScale.breaks} hotMin={a.bubbleScale.hotMin}
             viewState={view} onMove={setView} pinned={pinned} onBounds={setBounds}
@@ -408,20 +418,21 @@ export function ExplorePage({
             <Playback from={filters.dateFrom} to={filters.dateTo < data.coverage.dateTo ? filters.dateTo : data.coverage.dateTo}
               value={playDate} onChange={setPlayDate} mode={playMode} onMode={setPlayMode} />
           </div>
-          {!compare && (
-            <div className={controlsBox}>
-              <LayerControls {...layers} online={online}
-                onChange={({ areaShape, ...p }) => (areaShape ? setArea(areaShape) : setLayers({ ...layers, ...p }))} />
-            </div>
-          )}
+          <div className={controlsBox}>
+            <MapToolbar {...layers} metric={metric} onMetric={setMetric} onBasemap={setBasemap} online={online} onGoOnline={onGoOnline}
+              compare={compare} onCompare={setCompare}
+              onChange={({ areaShape, ...p }) => (areaShape ? setArea(areaShape) : setLayers({ ...layers, ...p }))} />
+          </div>
           <div className={legendBox}>
             <MapLegend metric={metric} breaks={a.breaks} min={a.min} max={a.max} tractCount={a.tractCount} noDataCount={a.noDataCount} lowMatchCount={a.lowMatchCount} coverage={data.coverage}
               bubbles={layers.showBubbles ? a.bubbleScale : undefined} storeControls={layers.showBubbles ? storeControls : undefined}
               winners={winners} hexes={hexes} />
           </div>
-          <p className="absolute top-3.5 right-13 rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary">
-            Click a store or {layers.areaShape === 'hexes' ? 'hexagon' : 'tract'} for recent claims and actions · double-click to move the pin
-          </p>
+          {!compare && (
+            <p className="absolute top-3.5 right-13 hidden rounded-md bg-primary/90 px-2 py-0.5 text-xs text-secondary shadow-xs ring-1 ring-secondary @[1360px]:block">
+              Click a store or {layers.areaShape === 'hexes' ? 'hexagon' : 'tract'} for details · double-click to move the pin
+            </p>
+          )}
         </div>
         {compare && (
           <div className="relative min-h-0">
@@ -429,7 +440,7 @@ export function ExplorePage({
               storesInRadius={b.storesInRadius} bubbleBreaks={b.bubbleScale.breaks} hotMin={b.bubbleScale.hotMin}
               viewState={view} onMove={setView} />
             <div className={controlsBox}>
-              <div className="rounded-lg bg-primary p-1 shadow-xs ring-1 ring-secondary"><MetricSwitcher value={metricB} onChange={setMetricB} /></div>
+              <MetricSelect value={metricB} onChange={setMetricB} label="Color areas by (right map)" />
             </div>
             <div className={legendBox}>
               <MapLegend metric={metricB} breaks={b.breaks} min={b.min} max={b.max} tractCount={b.tractCount} noDataCount={b.noDataCount} lowMatchCount={b.lowMatchCount} coverage={data.coverage}

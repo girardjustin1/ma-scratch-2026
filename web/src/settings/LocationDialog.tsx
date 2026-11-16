@@ -18,15 +18,12 @@ export const locationPromptDismissed = () => {
 };
 const dismissPrompt = () => { try { localStorage.setItem(PROMPT_KEY, 'dismissed'); } catch { /* private mode */ } };
 
-/** Header control on the map: the active place and radius; opens the location dialog. */
+/** First control in the map's filter row: the active place; opens the location dialog. The radius button sits next to it. */
 export function LocationButton({ settings, defaultLabel, onPress }: { settings: LocalSettings; defaultLabel: string; onPress: () => void }) {
   const place = activePlace(settings);
   return (
     <Button size="sm" color="secondary" iconLeading={MarkerPin01} onClick={onPress} aria-label="Location: change where the radius starts">
-      <span className="flex min-w-0 gap-1">
-        <span className="max-w-[220px] truncate">{place?.label ?? defaultLabel}</span>
-        <span className="shrink-0 text-tertiary tabular">· {settings.radiusMiles} mi</span>
-      </span>
+      <span className="block max-w-[220px] truncate">{place?.label ?? defaultLabel}</span>
     </Button>
   );
 }
@@ -102,7 +99,7 @@ export function LocationDialog({
             )}
 
             <div className="flex items-center gap-3 border-t border-secondary pt-4">
-              <p className="text-xs font-medium text-tertiary">Radius</p>
+              <p className="text-xs font-medium text-tertiary">Starting radius</p>
               <ButtonGroup size="sm" aria-label="Radius" disallowEmptySelection selectedKeys={[String(settings.radiusMiles)]}
                 onSelectionChange={(k) => { const v = Number([...k][0]); if (v) void update({ ...settings, radiusMiles: v }); }}>
                 {RADIUS_CHOICES.map((r) => <ButtonGroupItem key={r} id={String(r)} className={SELECTED}>{r} mi</ButtonGroupItem>)}

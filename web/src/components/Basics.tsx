@@ -17,13 +17,15 @@ export function CaveatNote({ children, dense, className }: { children: React.Rea
 }
 
 /** States the claims coverage area and listed-date window. */
-export function CoverageChip({ coverage }: { coverage: Coverage }) {
+const COVERAGE_TIP = 'Claims data exists only inside this area and date window. Everything else shows as no data.';
+
+/** The data's area and date window. `plain` is one line of small text, for tight rows. */
+export function CoverageChip({ coverage, plain = false }: { coverage: Coverage; plain?: boolean }) {
+  const text = <>Coverage: {coverage.label} · {fmtRange(coverage.dateFrom, coverage.dateTo)}</>;
   return (
-    <Tooltip title="Claims data exists only inside this area and date window. Everything else shows as no data.">
-      <TooltipTrigger className="cursor-default">
-        <BadgeWithIcon type="modern" size="md" color="gray" iconLeading={Calendar}>
-          Coverage: {coverage.label} · {fmtRange(coverage.dateFrom, coverage.dateTo)}
-        </BadgeWithIcon>
+    <Tooltip title={COVERAGE_TIP}>
+      <TooltipTrigger className={plain ? 'cursor-default text-xs text-tertiary tabular' : 'cursor-default'}>
+        {plain ? text : <BadgeWithIcon type="modern" size="md" color="gray" iconLeading={Calendar}>{text}</BadgeWithIcon>}
       </TooltipTrigger>
     </Tooltip>
   );

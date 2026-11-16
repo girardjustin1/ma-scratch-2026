@@ -8,7 +8,8 @@ import { MapLegend } from '../components/MapLegend';
 import { groupWinners } from '../domain/winners';
 import { gameRefsWithPace, samplePace, samplePaceData } from '../fixtures/samplePace';
 import { PrizeTierTable } from '../components/PrizeTierTable';
-import { FilterBar, LayerControls, MetricSwitcher } from '../components/Controls';
+import { FilterBar, LayerControls, MapToolbar, MetricSelect } from '../components/Controls';
+import type { Basemap } from '../map/mapStyle';
 import { GamePicker } from '../components/GamePicker';
 import { DetailPanel } from '../components/DetailDrawer';
 import { StoreCard, TractCard, type PanelTab } from '../components/SelectionCard';
@@ -103,8 +104,9 @@ export const Filters_: Story = {
   render: () => {
     const [f, setF] = useState<Filters>(S.defaultFilters);
     return (
-      <FilterBar filters={f} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
-        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)} />
+      <FilterBar filters={f} defaults={S.defaultFilters} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
+        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)}
+        summary={<p className="text-xs text-tertiary">127 listed claims (over $600) in radius · 295 covered tracts · Coverage: 5 mi around sample pin</p>} />
     );
   },
 };
@@ -123,23 +125,53 @@ export const GamePicker_: StoryObj<{ prices: number[] }> = {
   },
 };
 
-export const MetricSwitch: Story = {
+export const MetricSelect_: Story = {
+  name: 'Metric select',
   render: () => {
     const [m, setM] = useState<MetricKey>('claims');
-    return <MetricSwitcher value={m} onChange={setM} />;
+    return <MetricSelect value={m} onChange={setM} />;
   },
 };
 
-export const MetricSwitchHexagons: Story = {
-  name: 'Metric switch · hexagons (claims only)',
-  render: () => <MetricSwitcher value="claims" onChange={() => {}} claimsOnly />,
+export const MetricSelectHexagons: Story = {
+  name: 'Metric select · hexagons (claims only)',
+  render: () => <MetricSelect value="claims" onChange={() => {}} claimsOnly />,
 };
 
-export const Layers: StoryObj<{ online: boolean }> = {
+/** Several filters off their defaults: those buttons read darker and Reset appears. */
+export const FiltersChanged: Story = {
+  name: 'Filter bar · filters changed',
+  render: () => {
+    const [f, setF] = useState<Filters>({ ...S.defaultFilters, radiusMiles: 2, prizeBand: '1k-9k', storeClaims: [5, 100], prices: [10, 20] });
+    return (
+      <FilterBar filters={f} defaults={S.defaultFilters} games={S.gameRefs} minDate={S.coverage.dateFrom} maxDate={S.coverage.dateTo}
+        claimCounts={sampleGameCounts} onChange={setF} onReset={() => setF(S.defaultFilters)} />
+    );
+  },
+};
+
+const LAYER_DEFAULTS = { areaShape: 'tracts' as AreaShape, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true };
+
+export const Layers: Story = {
+  render: () => {
+    const [s, setS] = useState(LAYER_DEFAULTS);
+    return <LayerControls {...s} onChange={(p) => setS({ ...s, ...p })} />;
+  },
+};
+
+/** The row over the map's top-left corner. Streets and satellite need a Mapbox token, so they are off here. */
+export const MapToolbar_: StoryObj<{ online: boolean }> = {
+  name: 'Map toolbar',
   args: { online: false },
   render: ({ online }) => {
-    const [s, setS] = useState({ areaShape: 'tracts' as AreaShape, tractOpacity: 0.78, bubbleOpacity: 0.9, showBubbles: true, basemap: 'outline' as const });
-    return <LayerControls {...s} online={online} onChange={(p) => setS({ ...s, ...(p as typeof s) })} />;
+    const [s, setS] = useState(LAYER_DEFAULTS);
+    const [m, setM] = useState<MetricKey>('income');
+    const [b, setB] = useState<Basemap>('outline');
+    const [cmp, setCmp] = useState(false);
+    return (
+      <MapToolbar {...s} onChange={(p) => setS({ ...s, ...p })} metric={m} onMetric={setM} basemap={b} onBasemap={setB}
+        online={online} onGoOnline={() => {}} compare={cmp} onCompare={setCmp} />
+    );
   },
 };
 

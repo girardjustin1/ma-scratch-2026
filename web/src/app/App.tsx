@@ -110,6 +110,7 @@ export function App({ initialTab = 'map', initialMode = 'light', useLocal = fals
         {loaded && <>
         {tab === 'map' && (
           <ExplorePage key={view ? `local-${place?.id ?? 'pin'}-${radiusMiles}` : (mapGame ?? 'all')} data={view ?? sampleExploreData} initialFilters={filters} online={online}
+            onGoOnline={demo ? undefined : () => setOnline(true)}
             locationSlot={view && settings ? <LocationButton settings={settings} defaultLabel="Default pin" onPress={openLocation} /> : undefined} />
         )}
         {tab === 'games' && (local?.ev
